@@ -1,0 +1,78 @@
+name: Deploy to production
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring,bcmath,intl,pdo_mysql
+          coverage: none
+      - name: Composer validate
+        run: composer validate --no-check-publish
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: PHP syntax check
+        run: find app config routes database bootstrap -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT || 22 }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+      - name: Create release archive
+        run: tar --exclude='./.git' --exclude='./.env' --exclude='./vendor' --exclude='./node_modules' -czf release.tar.gz .
+      - name: Upload release
+        run: scp -P "${{ secrets.SERVER_PORT || 22 }}" release.tar.gz "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/ig-automate-release.tar.gz"
+      - name: Deploy
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT || 22 }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_PATH: ${{ secrets.SERVER_PATH }}
+        run: |
+          REMOTE_PATH=$(printf '%q' "$SERVER_PATH")
+          ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "SERVER_PATH=$REMOTE_PATH bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+          APP_PATH="\${SERVER_PATH:?SERVER_PATH secret is required}"
+          RELEASE=/tmp/ig-automate-release.tar.gz
+          test -d "$APP_PATH"
+          test -f "$RELEASE"
+          ENV_BACKUP=/tmp/ig-automate-env-$(date +%s)
+          if [ -f "$APP_PATH/.env" ]; then cp "$APP_PATH/.env" "$ENV_BACKUP"; fi
+          tar -xzf "$RELEASE" -C "$APP_PATH"
+          if [ -f "$ENV_BACKUP" ]; then cp "$ENV_BACKUP" "$APP_PATH/.env"; rm -f "$ENV_BACKUP"; fi
+          cd "$APP_PATH"
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+          php artisan migrate --force
+          php artisan optimize:clear
+          php artisan config:cache
+          php artisan route:cache
+          php artisan view:cache
+          if command -v supervisorctl >/dev/null 2>&1; then
+            supervisorctl reread || true
+            supervisorctl update || true
+            supervisorctl restart 'ig-automate-worker:*' || true
+          fi
+          rm -f "$RELEASE"
+          echo "Production deployment completed."
+          REMOTE
