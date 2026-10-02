@@ -41,32 +41,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup SSH
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_KEY }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      - name: Install sshpass
         run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -p "${{ secrets.SERVER_PORT || 22 }}" -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          sudo apt-get update
+          sudo apt-get install -y sshpass
 
       - name: Create release archive
         run: |
           tar --exclude='./.git' --exclude='./.env' --exclude='./vendor' --exclude='./node_modules' -czf release.tar.gz .
 
       - name: Upload release
+        env:
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT || 22 }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          scp -P "${{ secrets.SERVER_PORT || 22 }}" release.tar.gz "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/ig-automate-release.tar.gz"
+          sshpass -e scp             -P "$SERVER_PORT"             -o StrictHostKeyChecking=no             release.tar.gz             "$SERVER_USER@$SERVER_HOST:/tmp/ig-automate-release.tar.gz"
 
       - name: Deploy release
         env:
+          SSHPASS: ${{ secrets.SERVER_PASSWORD }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_PORT: ${{ secrets.SERVER_PORT || 22 }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_PATH: ${{ secrets.SERVER_PATH }}
         run: |
-          ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "SERVER_PATH=$(printf '%q' "$SERVER_PATH") bash -s" <<'REMOTE'
+          sshpass -e ssh             -p "$SERVER_PORT"             -o StrictHostKeyChecking=no             "$SERVER_USER@$SERVER_HOST"             "SERVER_PATH=$(printf '%q' "$SERVER_PATH") bash -s" <<'REMOTE'
           set -Eeuo pipefail
           APP_PATH="${SERVER_PATH:?SERVER_PATH secret is required}"
           RELEASE="/tmp/ig-automate-release.tar.gz"
@@ -99,7 +100,7 @@ jobs:
           if command -v supervisorctl >/dev/null 2>&1; then
             supervisorctl reread || true
             supervisorctl update || true
-            supervisorctl restart ig-automate-worker:* || true
+            supervisorctl restart 'ig-automate-worker:*' || true
           fi
 
           if command -v systemctl >/dev/null 2>&1; then
