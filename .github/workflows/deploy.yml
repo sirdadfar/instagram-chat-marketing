@@ -53,7 +53,7 @@ jobs:
           REMOTE_PATH=$(printf '%q' "$SERVER_PATH")
           ssh -p "$SERVER_PORT" "$SERVER_USER@$SERVER_HOST" "SERVER_PATH=$REMOTE_PATH bash -s" <<'REMOTE'
           set -Eeuo pipefail
-          APP_PATH="\${SERVER_PATH:?SERVER_PATH secret is required}"
+          APP_PATH="${SERVER_PATH:?SERVER_PATH secret is required}"
           RELEASE=/tmp/ig-automate-release.tar.gz
           test -d "$APP_PATH"
           test -f "$RELEASE"
