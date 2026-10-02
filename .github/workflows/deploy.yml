@@ -57,7 +57,12 @@ jobs:
           SERVER_PORT: ${{ secrets.SERVER_PORT || 22 }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
         run: |
-          sshpass -e scp             -P "$SERVER_PORT"             -o StrictHostKeyChecking=no             /tmp/ig-automate-release.tar.gz             "$SERVER_USER@$SERVER_HOST:/tmp/ig-automate-release.tar.gz"
+          set -Eeuo pipefail
+          sshpass -e ssh \
+            -p "$SERVER_PORT" \
+            -o StrictHostKeyChecking=no \
+            "$SERVER_USER@$SERVER_HOST" \
+            'cat > /tmp/ig-automate-release.tar.gz' < /tmp/ig-automate-release.tar.gz
 
       - name: Deploy release
         env:
