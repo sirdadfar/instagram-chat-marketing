@@ -1,26 +1,26 @@
-# CI/CD Production
+# CI/CD
 
-بعد از هر Push به main، GitHub Actions ابتدا Composer و syntax فایل‌های PHP را بررسی می‌کند و سپس نسخه پروژه را با SSH روی سرور Deploy می‌کند.
+این پروژه با GitHub Actions بعد از هر Push به `main` ابتدا تست و syntax check می‌شود و سپس به سرور Production Deploy می‌شود.
 
-## GitHub Secrets
+## Secrets موردنیاز
 
-در Settings → Secrets and variables → Actions این مقادیر را بسازید:
+در GitHub از مسیر **Settings → Secrets and variables → Actions** این Secrets را بسازید:
 
-- SERVER_HOST: دامنه یا IP سرور
-- SERVER_PORT: پورت SSH، معمولاً 22
-- SERVER_USER: کاربر Deploy
-- SERVER_PATH: مسیر پروژه، مثل /var/www/instagram-chat-marketing
-- SERVER_SSH_KEY: کلید خصوصی SSH
+- `SERVER_HOST` — دامنه یا IP سرور
+- `SERVER_PORT` — معمولاً `22`
+- `SERVER_USER` — کاربر SSH
+- `SERVER_PATH` — مسیر پروژه روی سرور، مثل `/var/www/instagram-chat-marketing`
+- `SERVER_SSH_KEY` — کلید خصوصی SSH مربوط به کاربر Deploy
 
-رمز عبور SSH را در GitHub یا Repository ذخیره نکنید.
+رمز عبور SSH را داخل GitHub، فایل workflow یا `.env` قرار ندهید.
 
-## .env
+## آماده‌سازی سرور
 
-فایل .env فقط روی سرور نگهداری می‌شود و workflow آن را overwrite نمی‌کند.
+کاربر Deploy باید روی مسیر پروژه دسترسی نوشتن داشته باشد و PHP 8.3، Composer، MySQL و Apache نصب باشند.
 
-## Queue
+در اولین نصب، `.env` را دستی روی سرور بسازید و مقادیر Production را داخل آن قرار دهید. CI/CD فایل `.env` را overwrite نمی‌کند.
 
-Redis لازم نیست. Queue روی database اجرا می‌شود. برای اجرای دائمی worker از Supervisor استفاده کنید.
+برای Queue بدون Redis می‌توانید Supervisor را با worker زیر تنظیم کنید:
 
 ```ini
 [program:ig-automate-worker]
@@ -34,3 +34,5 @@ user=www-data
 redirect_stderr=true
 stdout_logfile=/var/log/ig-automate-worker.log
 ```
+
+نام برنامه Supervisor باید با `ig-automate-worker` شروع شود تا workflow بتواند آن را restart کند.

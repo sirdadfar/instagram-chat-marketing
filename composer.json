@@ -1,1 +1,15 @@
-{"name":"custom/instagram-automation-panel","type":"project","require":{"php":"^8.3","laravel/framework":"^12.0"},"require-dev":{"fakerphp/faker":"^1.24","laravel/pint":"^1.21","phpunit/phpunit":"^11.5"},"autoload":{"psr-4":{"App\\":"app/"}}, "scripts":{"post-autoload-dump":["@php artisan package:discover --ansi"]}}
+{
+  "name": "custom/instagram-automation-panel",
+  "type": "project",
+  "require": {
+    "php": "^8.3",
+    "laravel/framework": "^12.0"
+  },
+  "require-dev": {
+    "fakerphp/faker": "^1.24",
+    "laravel/pint": "^1.21",
+    "phpunit/phpunit": "^11.5"
+  },
+  "autoload": {"psr-4": {"App\\": "app/"}},
+  "scripts": {"post-autoload-dump": ["@php artisan package:discover --ansi"]}
+}
