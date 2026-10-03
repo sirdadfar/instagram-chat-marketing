@@ -3,12 +3,13 @@
     $existingUrl = $attachmentUrl ?? '';
     $existingType = $attachmentType ?? '';
     $existingName = $attachmentName ?? '';
+    $existingSequence = $sequence ?? [];
 @endphp
 <div class="message-attachment-composer" data-message-composer data-prefix="{{ $prefix }}" data-automation-trigger="{{ $automationTrigger ?? '' }}" data-upload-url="{{ route('automations.media.upload') }}">
     <input type="hidden" name="{{ $prefix }}_attachment_url" data-composer-url value="{{ $existingUrl }}">
     <input type="hidden" name="{{ $prefix }}_attachment_type" data-composer-type value="{{ $existingType }}">
     <input type="hidden" name="{{ $prefix }}_attachment_name" data-composer-name value="{{ $existingName }}">
-    <input type="hidden" name="{{ $prefix }}_sequence_json" data-composer-sequence value="">
+    <input type="hidden" name="{{ $prefix }}_sequence_json" data-composer-sequence value="{{ e(json_encode($existingSequence, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) }}">
     <div class="composer-sequence-head"><strong>صف پیام‌ها</strong><span>چند پیام را پشت‌سرهم بچین؛ هر آیتم یک ارسال مستقل است.</span></div>
     <div class="composer-sequence-list" data-composer-sequence-list></div>
     <div class="composer-sequence-actions">
