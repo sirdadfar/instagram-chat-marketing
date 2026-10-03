@@ -320,6 +320,49 @@
             setStatus('در حال آماده‌سازی رسانه…'); const form=new FormData(); form.append('file',file,file.name||`media-${Date.now()}`);
             try{const res=await fetch(composer.dataset.uploadUrl,{method:'POST',headers:{'X-CSRF-TOKEN':csrf,Accept:'application/json'},body:form});const data=await res.json().catch(()=>({}));if(!res.ok||!data.ok||!data.url)throw new Error(data.message||'بارگذاری رسانه انجام نشد.');qs('[data-composer-url]',composer).value=data.url;qs('[data-composer-type]',composer).value=type;qs('[data-composer-name]',composer).value=data.filename||file.name||'';setStatus('رسانه آماده ارسال است.','success');render();}catch(err){setStatus(err.message||'بارگذاری رسانه انجام نشد.','error');}
         };
+        const sequenceInput=qs('[data-composer-sequence]',composer), sequenceList=qs('[data-composer-sequence-list]',composer);
+        let sequence=[];
+        try{sequence=JSON.parse(sequenceInput?.value||'[]');if(!Array.isArray(sequence))sequence=[];}catch{sequence=[];}
+        const messageField=()=>composer.closest('form')?.querySelector('[name="dm_message"],[name="private_reply"]');
+        const renderSequence=()=>{
+            if(!sequenceList)return;
+            sequenceList.innerHTML=sequence.length?sequence.map((item,i)=>{
+                const isMedia=item.type==='media';
+                const label=isMedia?(item.attachmentType==='audio'?'🎙 ویس':item.attachmentType==='video'?'🎬 ویدیو':'🖼 تصویر'):'💬 متن';
+                const preview=isMedia?(item.attachmentName||'رسانه انتخاب‌شده'):(item.message||'متن خالی');
+                return '<div class="composer-sequence-item"><span class="sequence-number">'+(i+1)+'</span><span class="sequence-kind">'+label+'</span><strong>'+escapeHtml(preview).slice(0,90)+'</strong><button type="button" class="icon-button" data-sequence-remove="'+i+'" title="حذف">×</button></div>';
+            }).join(''):'<div class="empty-mini">هنوز پیامی به صف اضافه نشده.</div>';
+            if(sequenceInput)sequenceInput.value=JSON.stringify(sequence);
+            qsa('[data-sequence-remove]',sequenceList).forEach(btn=>btn.addEventListener('click',()=>{sequence.splice(Number(btn.dataset.sequenceRemove),1);renderSequence();}));
+        };
+        const addCurrentToSequence=()=>{
+            const field=messageField(), text=(field?.value||'').trim();
+            const url=qs('[data-composer-url]',composer)?.value||'';
+            const type=qs('[data-composer-type]',composer)?.value||'';
+            const name=qs('[data-composer-name]',composer)?.value||'';
+            if(text) sequence.push({type:'text',message:text});
+            if(url) sequence.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
+            if(!text&&!url){field?.focus();setStatus('ابتدا متن یا رسانه را آماده کن.','error');return;}
+            if(field)field.value='';
+            qs('[data-composer-url]',composer).value='';qs('[data-composer-type]',composer).value='';qs('[data-composer-name]',composer).value='';
+            if(statusNode)statusNode.hidden=true;render();renderSequence();
+        };
+        qs('[data-composer-add-current]',composer)?.addEventListener('click',addCurrentToSequence);
+        qs('[data-composer-add-text]',composer)?.addEventListener('click',()=>{
+            const field=messageField();
+            if((field?.value||'').trim()){addCurrentToSequence();return;}
+            field?.focus();setStatus('متن را بنویس و سپس «افزودن آیتم فعلی» را بزن.','');
+        });
+        composer.closest('form')?.addEventListener('submit',()=>{
+            const field=messageField(), text=(field?.value||'').trim();
+            const url=qs('[data-composer-url]',composer)?.value||'';
+            const type=qs('[data-composer-type]',composer)?.value||'';
+            const name=qs('[data-composer-name]',composer)?.value||'';
+            if(text)sequence.push({type:'text',message:text});
+            if(url)sequence.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
+            if(sequenceInput)sequenceInput.value=JSON.stringify(sequence);
+        });
+        renderSequence();
         const setAvailability=()=>{const disabled=currentTrigger()==='comment'; composer.classList.toggle('is-disabled',disabled);qsa('[data-composer-tab="media"],[data-composer-tab="voice"],[data-composer-pick],[data-composer-record],[data-composer-stop]',composer).forEach(node=>node.disabled=disabled);const note=qs('[data-composer-disabled]',composer);if(note)note.hidden=!disabled;if(disabled){qs('[data-composer-tab="text"]',composer)?.click();qs('[data-composer-url]',composer).value='';qs('[data-composer-type]',composer).value='';qs('[data-composer-name]',composer).value='';render();}};
         qsa('[data-composer-tab]',composer).forEach(tab=>tab.addEventListener('click',()=>{if(tab.disabled)return;qsa('[data-composer-tab]',composer).forEach(t=>t.classList.toggle('is-active',t===tab));qsa('[data-composer-panel]',composer).forEach(panel=>panel.hidden=panel.dataset.composerPanel!==tab.dataset.composerTab);}));
         pick?.addEventListener('click',()=>fileInput?.click()); fileInput?.addEventListener('change',()=>{const file=fileInput.files?.[0];if(file)upload(file);fileInput.value='';});
