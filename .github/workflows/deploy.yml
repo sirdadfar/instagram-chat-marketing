@@ -86,33 +86,7 @@ jobs:
           TIMESTAMP="$(date +%Y%m%d%H%M%S)"
           BACKUP="/tmp/ig-automate-backup-$TIMESTAMP.tar.gz"
 
-          echo "Deploy target: $APP_PATH"
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: SERVER_PATH is empty"
-            exit 1
-          fi
-          if [ ! -d "$APP_PATH" ]; then
-            echo "ERROR: SERVER_PATH directory does not exist: $APP_PATH"
-            echo "Remote HOME: $HOME"
-            echo "Remote current directory: $(pwd)"
-            exit 1
-          fi
-          if [ ! -f "$APP_PATH/composer.json" ]; then
-            echo "ERROR: composer.json not found in SERVER_PATH: $APP_PATH"
-            echo "Directory contents:"
-            ls -la "$APP_PATH" || true
-            exit 1
-          fi
-          if [ ! -f "$APP_PATH/artisan" ]; then
-            echo "ERROR: artisan not found in SERVER_PATH: $APP_PATH"
-            echo "Directory contents:"
-            ls -la "$APP_PATH" || true
-            exit 1
-          fi
-          if [ ! -f "$RELEASE" ]; then
-            echo "ERROR: release archive was not uploaded: $RELEASE"
-            exit 1
-          fi
+          APP_PATH="${SERVER_PATH:?SERVER_PATH secret is required}"
 
           if [ -f "$APP_PATH/.env" ]; then
             cp "$APP_PATH/.env" "/tmp/ig-automate-env-$TIMESTAMP"
