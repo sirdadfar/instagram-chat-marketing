@@ -154,6 +154,8 @@ final class ZernioAutomationSync
             && trim((string) $dmMessage) !== '';
 
         if ($gateEnabled) {
+            // Zernio owns the follow-gate button. Do not add it to dm buttons.
+            unset($body['buttons'], $body['quickReplies'], $body['template']);
             $existingAudience = is_array($automation->audience) ? $automation->audience : [];
             $body['audience'] = [
                 'followerStatus' => 'follower',
