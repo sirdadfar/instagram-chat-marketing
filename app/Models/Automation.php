@@ -10,5 +10,5 @@ class Automation extends Model {
  public function account(): BelongsTo{return $this->belongsTo(InstagramAccount::class,'instagram_account_id');}
  public function keywords(): HasMany{return $this->hasMany(AutomationKeyword::class);}
  public function actions(): HasMany{return $this->hasMany(AutomationActionModel::class,'automation_id')->orderBy('sort_order');}
- public function logs(): HasMany{return $this->hasMany(AutomationLog::class);} public function versions(): HasMany{return $this->hasMany(AutomationVersion::class);} public function nodes(): HasMany{return $this->hasMany(AutomationNode::class);} public function edges(): HasMany{return $this->hasMany(AutomationEdge::class);} public function runs(): HasMany{return $this->hasMany(AutomationRun::class);}
+ public function logs(): HasMany{return $this->hasMany(AutomationLog::class);} public function versions(): HasMany{return $this->hasMany(AutomationVersion::class);} public function nodes(): HasMany{return $this->hasMany(AutomationNode::class);} public function edges(): HasMany{return $this->hasMany(AutomationEdge::class);} public function runs(): HasMany{return $this->hasMany(AutomationRun::class);} public function schedules(): HasMany{return $this->hasMany(AutomationSchedule::class);}
 }
