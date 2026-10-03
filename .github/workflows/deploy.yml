@@ -86,7 +86,7 @@ jobs:
           TIMESTAMP="$(date +%Y%m%d%H%M%S)"
           BACKUP="/tmp/ig-automate-backup-$TIMESTAMP.tar.gz"
 
-          APP_PATH="${SERVER_PATH:?SERVER_PATH secret is required}"
+          APP_PATH="$1"
 
           if [ -f "$APP_PATH/.env" ]; then
             cp "$APP_PATH/.env" "/tmp/ig-automate-env-$TIMESTAMP"
