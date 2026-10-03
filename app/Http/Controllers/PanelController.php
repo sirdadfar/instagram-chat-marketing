@@ -1116,33 +1116,66 @@ class PanelController extends Controller
             $message = trim((string) ($data['dm_message'] ?? ''));
         }
 
-        $attachmentUrl = trim((string) ($data['dm_attachment_url'] ?? ''));
-        $attachmentType = strtolower(trim((string) ($data['dm_attachment_type'] ?? '')));
-        $attachmentName = trim((string) ($data['dm_attachment_name'] ?? ''));
         $quickReplies = $this->decodeJsonList($data['quick_replies_json'] ?? '');
         $buttons = $this->decodeJsonList($data['buttons_json'] ?? '');
         $template = $this->decodeJsonValue($data['template_json'] ?? '');
 
-        $config = [];
-        if ($message !== '') $config['message'] = $message;
-        if ($attachmentUrl !== '' && $trigger !== 'comment') {
-            $config['attachmentUrl'] = $attachmentUrl;
-            $config['attachmentType'] = in_array($attachmentType, ['image', 'video', 'audio', 'file'], true) ? $attachmentType : 'file';
-            if ($attachmentName !== '') $config['attachmentName'] = $attachmentName;
-        }
-        if ($buttons) $config['buttons'] = array_values($buttons);
-        elseif ($quickReplies) $config['quickReplies'] = array_values($quickReplies);
-        if (is_array($template) && $template !== []) $config['template'] = $template;
-        if (!empty($data['message_tag'])) $config['messageTag'] = $data['message_tag'];
-        if (array_key_exists('link_preview', $data)) $config['linkPreview'] = (bool) $data['link_preview'];
+        $extras = [];
+        if ($buttons) $extras['buttons'] = array_values($buttons);
+        elseif ($quickReplies) $extras['quickReplies'] = array_values($quickReplies);
+        if (is_array($template) && $template !== []) $extras['template'] = $template;
+        if (!empty($data['message_tag'])) $extras['messageTag'] = $data['message_tag'];
+        if (array_key_exists('link_preview', $data)) $extras['linkPreview'] = (bool) $data['link_preview'];
 
-        $actionType = $trigger === 'comment' ? ($privateAction ? 'private_reply' : null) : 'direct_message';
-        if ($actionType && $config !== []) {
-            $automation->actions()->create([
-                'action' => $actionType,
-                'sort_order' => $order++,
-                'config' => $config,
-            ]);
+        $sequence = $this->decodeJsonList($data['dm_sequence_json'] ?? '');
+
+        if ($trigger !== 'comment' && $sequence) {
+            foreach ($sequence as $item) {
+                if (!is_array($item)) continue;
+                $type = (string) ($item['type'] ?? '');
+                $text = trim((string) ($item['message'] ?? ''));
+                $url = trim((string) ($item['attachmentUrl'] ?? ''));
+                if (!in_array($type, ['text', 'media'], true)) continue;
+                if ($type === 'text' && $text === '') continue;
+                if ($type === 'media' && $url === '') continue;
+
+                $config = $extras;
+                if ($text !== '') $config['message'] = $text;
+                if ($url !== '') {
+                    $attachmentType = strtolower((string) ($item['attachmentType'] ?? 'file'));
+                    $config['attachmentUrl'] = $url;
+                    $config['attachmentType'] = in_array($attachmentType, ['image','video','audio','file'], true) ? $attachmentType : 'file';
+                    if (!empty($item['attachmentName'])) $config['attachmentName'] = $item['attachmentName'];
+                }
+
+                if ($config !== []) {
+                    $automation->actions()->create([
+                        'action' => 'direct_message',
+                        'sort_order' => $order++,
+                        'config' => $config,
+                    ]);
+                }
+            }
+        } else {
+            $attachmentUrl = trim((string) ($data['dm_attachment_url'] ?? ''));
+            $attachmentType = strtolower(trim((string) ($data['dm_attachment_type'] ?? '')));
+            $attachmentName = trim((string) ($data['dm_attachment_name'] ?? ''));
+            $config = $extras;
+            if ($message !== '') $config['message'] = $message;
+            if ($attachmentUrl !== '' && $trigger !== 'comment') {
+                $config['attachmentUrl'] = $attachmentUrl;
+                $config['attachmentType'] = in_array($attachmentType, ['image','video','audio','file'], true) ? $attachmentType : 'file';
+                if ($attachmentName !== '') $config['attachmentName'] = $attachmentName;
+            }
+
+            $actionType = $trigger === 'comment' ? ($privateAction ? 'private_reply' : null) : 'direct_message';
+            if ($actionType && $config !== []) {
+                $automation->actions()->create([
+                    'action' => $actionType,
+                    'sort_order' => $order++,
+                    'config' => $config,
+                ]);
+            }
         }
 
         if (!empty($data['hide_comment'])) {
