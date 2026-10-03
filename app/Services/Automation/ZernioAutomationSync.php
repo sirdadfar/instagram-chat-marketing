@@ -6,6 +6,7 @@ namespace App\Services\Automation;
 
 use App\Models\Automation;
 use App\Services\Zernio\ZernioClient;
+use App\Models\AppSetting;
 
 final class ZernioAutomationSync
 {
@@ -148,8 +149,8 @@ final class ZernioAutomationSync
 
         // Follow gate is a native Instagram audience rule:
         // only followers receive the main DM; unknown first-time commenters are asked to confirm after following.
-        $gateEnabled = $trigger === 'comment'
-            && (bool) ($settings['followGateEnabled'] ?? false)
+        $gateEnabled = in_array($trigger, ['comment', 'story_reply'], true)
+            && (bool) AppSetting::getValue('follow_gate_enabled', true)
             && trim((string) $dmMessage) !== '';
 
         if ($gateEnabled) {
@@ -164,21 +165,9 @@ final class ZernioAutomationSync
             }
 
             $body['followGate'] = [
-                'message' => trim((string) data_get(
-                    $settings,
-                    'followGate.message',
-                    'لطفاً ابتدا صفحه را دنبال کنید و سپس روی «بررسی کردم» بزنید.'
-                )),
-                'buttonLabel' => trim((string) data_get(
-                    $settings,
-                    'followGate.buttonLabel',
-                    'بررسی کردم ✓'
-                )),
-                'notFollowingMessage' => trim((string) data_get(
-                    $settings,
-                    'followGate.notFollowingMessage',
-                    'به نظر می‌رسد هنوز صفحه را دنبال نکرده‌اید. بعد از دنبال‌کردن دوباره بررسی کنید.'
-                )),
+                'message' => trim((string) AppSetting::getValue('follow_gate_message', 'دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.')),
+                'buttonLabel' => trim((string) AppSetting::getValue('follow_gate_button_label', 'فالو کردم ✓')),
+                'notFollowingMessage' => trim((string) AppSetting::getValue('follow_gate_not_following_message', 'هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.')),
             ];
         }
 
