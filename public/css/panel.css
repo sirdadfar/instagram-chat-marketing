@@ -87,3 +87,14 @@
 .collage-note{background:#fffdfb;color:var(--ink);box-shadow:0 15px 30px rgba(56,40,32,.12)}
 .soft-button.light{background:var(--surface);color:var(--ink);border-color:var(--line)}
 .topbar [data-theme-toggle]{display:none!important}
+
+
+/* Multi-message sequence composer */
+.composer-sequence-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.composer-sequence-head span{font-size:12px;color:var(--muted)}
+.composer-sequence-list{display:grid;gap:8px;margin-top:10px}
+.composer-sequence-item{display:grid;grid-template-columns:30px 80px minmax(0,1fr) 34px;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.composer-sequence-item strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.sequence-number{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-weight:800}
+.sequence-kind{font-size:11px;color:var(--muted);white-space:nowrap}
+.composer-sequence-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
