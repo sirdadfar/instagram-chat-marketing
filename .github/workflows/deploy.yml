@@ -72,7 +72,13 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_PATH: ${{ secrets.SERVER_PATH }}
         run: |
-          sshpass -e ssh             -p "$SERVER_PORT"             -o StrictHostKeyChecking=no             "$SERVER_USER@$SERVER_HOST"             "SERVER_PATH=$(printf '%q' "$SERVER_PATH") bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          printf '%s\n' "$SERVER_PATH" | sshpass -e ssh \
+            -p "$SERVER_PORT" \
+            -o StrictHostKeyChecking=no \
+            "$SERVER_USER@$SERVER_HOST" \
+            'IFS= read -r SERVER_PATH && export SERVER_PATH && bash -s' <<'REMOTE'
           set -Eeuo pipefail
           APP_PATH="${SERVER_PATH:?SERVER_PATH secret is required}"
           RELEASE="/tmp/ig-automate-release.tar.gz"
@@ -86,7 +92,7 @@ jobs:
             cp "$APP_PATH/.env" "/tmp/ig-automate-env-$TIMESTAMP"
           fi
 
-          tar -czf "$BACKUP" -C "$APP_PATH" . --exclude='./vendor' || true
+          tar --exclude='./vendor' -czf "$BACKUP" -C "$APP_PATH" . || true
           tar -xzf "$RELEASE" -C "$APP_PATH"
 
           if [ -f "/tmp/ig-automate-env-$TIMESTAMP" ]; then
