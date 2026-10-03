@@ -9,7 +9,7 @@
 <form method="POST" action="{{ route('templates.store') }}" class="form-grid">@csrf
 <div class="form-field"><label>نام</label><input name="name" required placeholder="مثلاً پاسخ قیمت"></div>
 <div class="form-field"><label>دسته</label><select name="category"><option value="general">عمومی</option><option value="sales">فروش</option><option value="support">پشتیبانی</option><option value="follow_gate">Follow Gate</option></select></div>
-<div class="form-field full"><label>متن پیام</label><textarea name="body" rows="7" required placeholder="سلام {{username}} 👋&#10;اطلاعات محصول: {{product_price}}"></textarea><small class="muted">متغیرها با {{variable}} نوشته می‌شوند.</small></div>
+<div class="form-field full"><label>متن پیام</label><textarea name="body" rows="7" required placeholder="سلام @{{username}} 👋&#10;اطلاعات محصول: @{{product_price}}"></textarea><small class="muted">متغیرها با @{{variable}} در قالب Blade نمایش داده می‌شوند و در پیام به {{variable}} تبدیل می‌شوند.</small></div>
 <div class="full"><button class="primary-action" type="submit">＋ ذخیره قالب</button></div>
 </form>
 </section>
