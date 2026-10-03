@@ -340,9 +340,9 @@
             const url=qs('[data-composer-url]',composer)?.value||'';
             const type=qs('[data-composer-type]',composer)?.value||'';
             const name=qs('[data-composer-name]',composer)?.value||'';
-            if(text) sequence.push({type:'text',message:text});
-            if(url) sequence.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
-            if(!text&&!url){field?.focus();setStatus('ابتدا متن یا رسانه را آماده کن.','error');return;}
+            if(text && sequence.length<20) sequence.push({type:'text',message:text});
+            if(url && sequence.length<20) sequence.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
+            if(!text&&!url){field?.focus();setStatus('ابتدا متن یا رسانه را آماده کن.','error');return;} if(sequence.length>=20){setStatus('حداکثر ۲۰ پیام در هر صف قابل ثبت است.','error');return;}
             if(field)field.value='';
             qs('[data-composer-url]',composer).value='';qs('[data-composer-type]',composer).value='';qs('[data-composer-name]',composer).value='';
             if(statusNode)statusNode.hidden=true;render();renderSequence();
