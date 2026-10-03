@@ -1130,6 +1130,7 @@ class PanelController extends Controller
         $sequence = $this->decodeJsonList($data['dm_sequence_json'] ?? '');
 
         if ($trigger !== 'comment' && $sequence) {
+            $sequence = array_slice($sequence, 0, 20);
             foreach ($sequence as $item) {
                 if (!is_array($item)) continue;
                 $type = (string) ($item['type'] ?? '');
