@@ -15,14 +15,10 @@ class ActionExecutor {
  private function privateReply(Automation $a,array $c,string $m,array $cfg):array {if(!$m||empty($c['post_id'])||empty($c['comment_id']))return ['action'=>'private_reply','status'=>'skipped','reason'=>'missing_data'];$body=['message'=>$m];if(!empty($cfg['buttons']))$body['buttons']=$cfg['buttons'];elseif(!empty($cfg['quickReplies']))$body['quickReplies']=$cfg['quickReplies'];$r=$this->zernio->privateReply($c['post_id'],$c['comment_id'],$a->account->zernio_account_id,$body);return ['action'=>'private_reply','status'=>'sent','response'=>$r];}
  private function directMessage(Automation $a,array $c,string $m,array $cfg):array {
   if (empty($c['follow_gate_bypass']) && (bool) AppSetting::getValue('follow_gate_enabled', true) && !empty($c['user_id'])) {
-    $profileFollower = data_get($c, 'instagram_profile.isFollower');
-    $follow = $profileFollower === true ? ['isFollower' => true] : null;
-    if ($follow === null) {
-      try {
-        $follow = $this->zernio->getFollowStatus($a->account->zernio_account_id, (string) $c['user_id'], true);
-      } catch (\Throwable $e) {
-        $follow = ['isFollower' => $profileFollower];
-      }
+    try {
+      $follow = $this->zernio->getFollowStatus($a->account->zernio_account_id, (string) $c['user_id'], true);
+    } catch (\Throwable $e) {
+      $follow = ['isFollower' => data_get($c, 'instagram_profile.isFollower')];
     }
     if (data_get($follow, 'isFollower') !== true) {
       $token=$this->storeFollowGatePending($a, $c);
