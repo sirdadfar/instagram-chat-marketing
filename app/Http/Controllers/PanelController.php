@@ -1022,7 +1022,7 @@ class PanelController extends Controller
         }
     }
 
-    public function saveSettings(Request $r)
+    public function saveSettings(Request $r, ZernioAutomationSync $nativeSync)
     {
         AppSetting::setValue('automation_global_enabled', $r->boolean('global_enabled'));
         AppSetting::setValue('business_hours_enabled', $r->boolean('hours_enabled'));
@@ -1041,6 +1041,18 @@ class PanelController extends Controller
         }
 
         AppSetting::setValue('business_hours', $hours);
+
+        Automation::with(['keywords','actions','account'])
+            ->whereIn('trigger', ['comment','story_reply'])
+            ->where('status', 'active')
+            ->get()
+            ->each(function (Automation $automation) use ($nativeSync): void {
+                try {
+                    $nativeSync->sync($automation);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            });
 
         return back()->with('success', 'تنظیمات با موفقیت ذخیره شد.');
     }
