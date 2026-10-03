@@ -515,7 +515,7 @@ class PanelController extends Controller
 
         $followGateEnabled = $d['trigger'] === 'comment'
             && ($d['goal'] ?? 'comment_dm') !== 'comment_public'
-            && (bool) ($d['follow_gate_enabled'] ?? false)
+            && (bool) ($d['follow_gate_enabled'] ?? AppSetting::getValue('follow_gate_enabled', true))
             && trim((string) ($d['private_reply'] ?? '')) !== '';
 
         $a = Automation::create([
@@ -630,7 +630,7 @@ class PanelController extends Controller
         $goalValue = $d['goal'] ?? ($triggerValue === 'comment' ? 'comment_dm' : 'dm_reply');
         $followGateEnabled = $triggerValue === 'comment'
             && $goalValue !== 'comment_public'
-            && (bool) ($d['follow_gate_enabled'] ?? false)
+            && (bool) ($d['follow_gate_enabled'] ?? AppSetting::getValue('follow_gate_enabled', true))
             && trim((string) ($d['private_reply'] ?? '')) !== '';
 
         $automation->update([
