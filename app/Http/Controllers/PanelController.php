@@ -978,6 +978,11 @@ class PanelController extends Controller
 
         return view('settings.index', [
             'accounts' => $accounts,
+            'followGateEnabled' => (bool) AppSetting::getValue('follow_gate_enabled', true),
+            'followGateMessage' => (string) AppSetting::getValue('follow_gate_message', 'دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.'),
+            'followGateButtonLabel' => (string) AppSetting::getValue('follow_gate_button_label', 'فالو کردم ✓'),
+            'followGateNotFollowingMessage' => (string) AppSetting::getValue('follow_gate_not_following_message', 'هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.'),
+
             'selectedAccount' => $selected,
             'health' => $health,
             'iceBreakers' => is_array($iceBreakers) ? $iceBreakers : [],
@@ -1021,6 +1026,10 @@ class PanelController extends Controller
     {
         AppSetting::setValue('automation_global_enabled', $r->boolean('global_enabled'));
         AppSetting::setValue('business_hours_enabled', $r->boolean('hours_enabled'));
+        AppSetting::setValue('follow_gate_enabled', $r->boolean('follow_gate_enabled'));
+        AppSetting::setValue('follow_gate_message', trim((string) $r->input('follow_gate_message', 'دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.')));
+        AppSetting::setValue('follow_gate_button_label', trim((string) $r->input('follow_gate_button_label', 'فالو کردم ✓')));
+        AppSetting::setValue('follow_gate_not_following_message', trim((string) $r->input('follow_gate_not_following_message', 'هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.')));
 
         $hours = [];
         for ($i = 0; $i < 7; $i++) {
