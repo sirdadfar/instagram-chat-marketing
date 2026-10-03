@@ -62,9 +62,10 @@ class ActionExecutor {
     'created_at'=>now()->toIso8601String(),
   ];
   $contact->update(['metadata'=>$metadata]);
-}
+  return $token;
+ }
 
- private function sendFollowGate(Automation $a,array $c):void {
+ private function sendFollowGate(Automation $a,array $c,string $token):void {
   $message=(string) AppSetting::getValue('follow_gate_message','دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.');
   $label=(string) AppSetting::getValue('follow_gate_button_label','فالو کردم ✓');
   $button=[['type'=>'postback','title'=>mb_substr($label,0,20),'payload'=>'follow_gate:'.(string)$token]];
