@@ -25,8 +25,8 @@ class ActionExecutor {
       }
     }
     if (data_get($follow, 'isFollower') !== true) {
-      $this->storeFollowGatePending($a, $c);
-      $this->sendFollowGate($a, $c);
+      $token=$this->storeFollowGatePending($a, $c);
+      $this->sendFollowGate($a, $c, $token);
       return ['action'=>'direct_message','status'=>'waiting_follow','reason'=>'follow_required'];
     }
   }
@@ -47,8 +47,8 @@ class ActionExecutor {
   $r=$this->zernio->sendMessage($c['conversation_id'],$a->account->zernio_account_id,$body,(string)Str::uuid());
   return ['action'=>'direct_message','status'=>'sent','attachmentType'=>$body['attachmentType']??null,'response'=>$r];
  }
- private function storeFollowGatePending(Automation $a,array $c):void {
-  if (empty($c['user_id'])) return;
+ private function storeFollowGatePending(Automation $a,array $c):string {
+  if (empty($c['user_id'])) return ''; 
   $contact = Contact::updateOrCreate(
     ['instagram_account_id'=>$a->account->id,'external_user_id'=>(string)$c['user_id']],
     ['username'=>$c['username']??null,'full_name'=>$c['full_name']??null,'last_seen_at'=>now()]
@@ -67,7 +67,6 @@ class ActionExecutor {
  private function sendFollowGate(Automation $a,array $c):void {
   $message=(string) AppSetting::getValue('follow_gate_message','دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.');
   $label=(string) AppSetting::getValue('follow_gate_button_label','فالو کردم ✓');
-  $token=data_get(Contact::where('instagram_account_id',$a->account->id)->where('external_user_id',(string)$c['user_id'])->value('metadata'),'follow_gate_pending.token');
   $button=[['type'=>'postback','title'=>mb_substr($label,0,20),'payload'=>'follow_gate:'.(string)$token]];
   if (!empty($c['conversation_id'])) {
     $this->zernio->sendMessage($c['conversation_id'],$a->account->zernio_account_id,['message'=>$message,'buttons'=>$button],(string)Str::uuid());
