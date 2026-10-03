@@ -74,25 +74,30 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          printf '%s\n' "$SERVER_PATH" | sshpass -e ssh \
+          REMOTE_CMD="bash -s -- $(printf '%q' "$SERVER_PATH")"
+          sshpass -e ssh \
             -p "$SERVER_PORT" \
             -o StrictHostKeyChecking=no \
             "$SERVER_USER@$SERVER_HOST" \
-            'IFS= read -r SERVER_PATH && export SERVER_PATH && bash -s' <<'REMOTE'
+            "$REMOTE_CMD" <<'REMOTE'
           set -Eeuo pipefail
-          APP_PATH="${SERVER_PATH:?SERVER_PATH secret is required}"
+          APP_PATH="$1"
           RELEASE="/tmp/ig-automate-release.tar.gz"
           TIMESTAMP="$(date +%Y%m%d%H%M%S)"
           BACKUP="/tmp/ig-automate-backup-$TIMESTAMP.tar.gz"
 
-          test -f "$RELEASE"
+          echo "Deploy target: $APP_PATH"
+          test -n "$APP_PATH"
           test -d "$APP_PATH"
+          test -f "$APP_PATH/composer.json"
+          test -f "$APP_PATH/artisan"
+          test -f "$RELEASE"
 
           if [ -f "$APP_PATH/.env" ]; then
             cp "$APP_PATH/.env" "/tmp/ig-automate-env-$TIMESTAMP"
           fi
 
-          tar --exclude='./vendor' -czf "$BACKUP" -C "$APP_PATH" . || true
+          tar --exclude='./vendor' -czf "$BACKUP" -C "$APP_PATH" .
           tar -xzf "$RELEASE" -C "$APP_PATH"
 
           if [ -f "/tmp/ig-automate-env-$TIMESTAMP" ]; then
@@ -119,5 +124,5 @@ jobs:
           fi
 
           rm -f "$RELEASE"
-          echo "Deployment completed: $TIMESTAMP"
+          echo "Deployment completed successfully: $TIMESTAMP"
           REMOTE
