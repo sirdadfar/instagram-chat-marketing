@@ -358,8 +358,14 @@
             const url=qs('[data-composer-url]',composer)?.value||'';
             const type=qs('[data-composer-type]',composer)?.value||'';
             const name=qs('[data-composer-name]',composer)?.value||'';
-            if(text)sequence.push({type:'text',message:text});
-            if(url)sequence.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
+            if(text){
+                if(sequence.length===1 && sequence[0]?.type==='text') sequence[0].message=text;
+                else sequence.push({type:'text',message:text});
+            }
+            if(url){
+                if(sequence.length===1 && sequence[0]?.type==='media') Object.assign(sequence[0],{attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
+                else sequence.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
+            }
             if(sequenceInput)sequenceInput.value=JSON.stringify(sequence);
         });
         renderSequence();
