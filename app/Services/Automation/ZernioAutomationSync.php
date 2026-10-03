@@ -125,12 +125,51 @@ final class ZernioAutomationSync
 
         // The platform accepts either flat buttons, quick replies or a generic template.
         // During an update we explicitly clear the previous mutually-exclusive content.
+        $buttons = array_values(array_filter(array_map(
+            static function ($button): ?array {
+                if (!is_array($button)) {
+                    return null;
+                }
+
+                $type = (string) ($button['type'] ?? '');
+                $title = trim((string) ($button['title'] ?? ''));
+
+                if ($title === '' || mb_strlen($title) > 20) {
+                    return null;
+                }
+
+                if ($type === 'url') {
+                    $url = trim((string) ($button['url'] ?? ''));
+                    if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
+                        return null;
+                    }
+
+                    return ['type' => 'url', 'title' => $title, 'url' => $url];
+                }
+
+                if ($type === 'postback') {
+                    $payload = trim((string) ($button['payload'] ?? ''));
+                    if ($payload === '') {
+                        return null;
+                    }
+
+                    return ['type' => 'postback', 'title' => $title, 'payload' => $payload];
+                }
+
+                return null;
+            },
+            $buttons
+        )));
+        $buttons = array_values(array_slice($buttons, 0, 3));
+
         if ($buttons) {
             if (mb_strlen((string) ($dmMessage ?? '')) > 640) {
                 throw new \RuntimeException('برای استفاده از دکمه‌ها، متن پیام خصوصی باید حداکثر ۶۴۰ کاراکتر باشد.');
             }
-            $body['buttons'] = array_values(array_slice($buttons, 0, 3));
+            $body['buttons'] = $buttons;
             $body['template'] = null;
+        } elseif ($automation->zernio_automation_id) {
+            $body['buttons'] = [];
         } elseif ($quickReplies) {
             $body['quickReplies'] = array_values(array_slice($quickReplies, 0, 13));
             if ($automation->zernio_automation_id) {
