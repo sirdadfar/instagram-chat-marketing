@@ -7,7 +7,7 @@
 </div>
 <div class="filter-strip">
     <form class="filter-search" method="GET"><span>⌕</span><input name="q" value="{{ request('q') }}" placeholder="نام کاربری یا نام مخاطب…"></form>
-    <a class="filter-chip {{ !request('human') ? 'active' : '' }}" href="{{ route('contacts') }}">همه <span>{{ AppModelsContact::count() }}</span></a>
+    <a class="filter-chip {{ !request('human') ? 'active' : '' }}" href="{{ route('contacts') }}">همه <span>{{ \App\Models\Contact::count() }}</span></a>
     <a class="filter-chip {{ request('human') ? 'active' : '' }}" href="{{ route('contacts',['human'=>1]) }}">نیازمند پیگیری</a>
 </div>
 <div class="panel-card">
