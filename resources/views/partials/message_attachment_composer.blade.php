@@ -8,6 +8,13 @@
     <input type="hidden" name="{{ $prefix }}_attachment_url" data-composer-url value="{{ $existingUrl }}">
     <input type="hidden" name="{{ $prefix }}_attachment_type" data-composer-type value="{{ $existingType }}">
     <input type="hidden" name="{{ $prefix }}_attachment_name" data-composer-name value="{{ $existingName }}">
+    <input type="hidden" name="{{ $prefix }}_sequence_json" data-composer-sequence value="">
+    <div class="composer-sequence-head"><strong>صف پیام‌ها</strong><span>چند پیام را پشت‌سرهم بچین؛ هر آیتم یک ارسال مستقل است.</span></div>
+    <div class="composer-sequence-list" data-composer-sequence-list></div>
+    <div class="composer-sequence-actions">
+        <button type="button" class="secondary-action" data-composer-add-text>＋ افزودن پیام متنی</button>
+        <button type="button" class="secondary-action" data-composer-add-current>＋ افزودن آیتم فعلی</button>
+    </div>
     <div class="composer-capability-head"><div><strong>پیوست پیام</strong><span>متن را با عکس، ویدیو یا پیام صوتی همراه کن.</span></div><span class="composer-size-badge">حداکثر ۲۵ مگابایت</span></div>
     <div class="composer-tabs" role="tablist">
         <button type="button" class="composer-tab is-active" data-composer-tab="text">متن</button>
