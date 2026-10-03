@@ -62,7 +62,7 @@ jobs:
             -p "$SERVER_PORT" \
             -o StrictHostKeyChecking=no \
             "$SERVER_USER@$SERVER_HOST" \
-            'cat > /tmp/ig-automate-release.tar.gz' < /tmp/ig-automate-release.tar.gz
+            'cat > "$HOME/.ig-automate-release.tar.gz"' < /tmp/ig-automate-release.tar.gz
 
       - name: Deploy release
         env:
@@ -82,7 +82,7 @@ jobs:
             "$REMOTE_CMD" <<'REMOTE'
           set -Eeuo pipefail
           APP_PATH="$1"
-          RELEASE="/tmp/ig-automate-release.tar.gz"
+          RELEASE="$HOME/.ig-automate-release.tar.gz"
           TIMESTAMP="$(date +%Y%m%d%H%M%S)"
           BACKUP="/tmp/ig-automate-backup-$TIMESTAMP.tar.gz"
 
