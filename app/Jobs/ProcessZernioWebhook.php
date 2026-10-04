@@ -47,7 +47,7 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
     try{
       $follow=$zernio->getFollowStatus($account->zernio_account_id,(string)$data['user_id'],true);
       if(data_get($follow,'isFollower')!==null)break;
-    }catch(\\Throwable $e){
+    }catch(\Throwable $e){
       $followError=$e;
     }
     if($attempt<3)usleep(500000);
