@@ -38,10 +38,27 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   $contact=Contact::where('instagram_account_id',$account->id)->where('external_user_id',(string)$data['user_id'])->first();
   $pending=data_get($contact?->metadata,'follow_gate_pending');
   if(!is_array($pending)||empty($pending['token'])||(string)$data['postback_payload']!=='follow_gate:'.$pending['token']) return false;
-  $follow=$zernio->getFollowStatus($account->zernio_account_id,(string)$data['user_id'],true);
-  if(data_get($follow,'isFollower')!==true){
-    $message=(string)AppSetting::getValue('follow_gate_not_following_message','هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.');
+  // The postback itself grants Instagram DM consent. Meta/Zernio can need a short
+  // moment to expose the refreshed follow relationship, so do not fail the job on
+  // a transient null/transport response.
+  $follow=null;
+  $followError=null;
+  for($attempt=1;$attempt<=3;$attempt++){
+    try{
+      $follow=$zernio->getFollowStatus($account->zernio_account_id,(string)$data['user_id'],true);
+      if(data_get($follow,'isFollower')!==null)break;
+    }catch(\\Throwable $e){
+      $followError=$e;
+    }
+    if($attempt<3)usleep(500000);
+  }
+
+  $isFollower=data_get($follow,'isFollower');
+  if($isFollower!==true){
     $label=(string)AppSetting::getValue('follow_gate_button_label','فالو کردم ✓');
+    $message=$isFollower===false
+      ?(string)AppSetting::getValue('follow_gate_not_following_message','هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.')
+      :(string)AppSetting::getValue('follow_gate_unknown_message','فعلاً وضعیت فالو قابل بررسی نیست. چند لحظه بعد دوباره روی «فالو کردم» بزن.');
     $zernio->sendMessage($data['conversation_id'],$account->zernio_account_id,['message'=>$message,'buttons'=>[['type'=>'postback','title'=>mb_substr($label,0,20),'payload'=>'follow_gate:'.$pending['token']]]],(string)Str::uuid());
     return true;
   }
