@@ -38,8 +38,16 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout
+      - name: Checkout latest main
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync deploy source to latest main
+        run: |
+          set -Eeuo pipefail
+          git fetch origin main
+          git checkout --force origin/main
 
       - name: Install sshpass
         run: |
