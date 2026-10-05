@@ -246,6 +246,15 @@ class ZernioClient
         return $this->get('/analytics/instagram/demographics', array_merge(['accountId' => $accountId], $query));
     }
 
+    public function getAnalyticsDelta(?string $cursor = null, array $query = []): array
+    {
+        $params = array_merge(['limit' => 100], $query);
+        if ($cursor !== null && $cursor !== '') {
+            $params['cursor'] = $cursor;
+        }
+        return $this->get('/analytics/delta', $params);
+    }
+
     public function listInstagramAudio(string $accountId, array $query = []): array
     {
         return $this->get('/accounts/' . rawurlencode($accountId) . '/instagram/audio', $query);
