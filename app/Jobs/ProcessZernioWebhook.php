@@ -18,7 +18,16 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
-class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWithQueue,Queueable,SerializesModels;public int $tries=3;public array $backoff=[5,30,120];public function __construct(public int $webhookEventId){} public function handle(WebhookEventAdapter $adapter,AutomationEngine $engine,ActionExecutor $executor,ZernioClient $zernio):void {$event=WebhookEvent::findOrFail($this->webhookEventId);if($event->status==='processed')return;$data=$adapter->adapt($event->payload,$event->event_type);if(!$data){$event->update(['status'=>'ignored','processed_at'=>now()]);return;}$account=InstagramAccount::where('zernio_account_id',$data['account_id']??'')->first();if(!$account){$event->update(['status'=>'ignored','error'=>'Unknown Instagram account','processed_at'=>now()]);return;}$this->persistInbox($account,$data);
+class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWithQueue,Queueable,SerializesModels;public int $tries=3;public array $backoff=[5,30,120];public function __construct(public int $webhookEventId){} public function handle(WebhookEventAdapter $adapter,AutomationEngine $engine,ActionExecutor $executor,ZernioClient $zernio):void {$event=WebhookEvent::findOrFail($this->webhookEventId);if($event->status==='processed')return;$data=$adapter->adapt($event->payload,$event->event_type);if(!$data){$event->update(['status'=>'ignored','processed_at'=>now()]);return;}$account=InstagramAccount::where('zernio_account_id',$data['account_id']??'')->first();if(!$account){$event->update(['status'=>'ignored','error'=>'Unknown Instagram account','processed_at'=>now()]);return;}if (($data['trigger'] ?? null) === 'analytics_synced') {
+    $metadata = is_array($account->metadata) ? $account->metadata : [];
+    $metadata['analytics_synced_at'] = $data['timestamp'] ?? now()->toIso8601String();
+    $metadata['analytics_sync'] = is_array($data['sync'] ?? null) ? $data['sync'] : [];
+    $account->update(['metadata' => $metadata]);
+    $event->update(['status' => 'processed', 'processed_at' => now()]);
+    return;
+  }
+
+  $this->persistInbox($account,$data);
   if (!empty($data['postback_payload']) && str_starts_with((string)$data['postback_payload'],'follow_gate:')) {
    if ($this->handleFollowGateCallback($account,$data,$engine,$executor,$zernio)) {
     $event->update(['status'=>'processed','processed_at'=>now()]); return;
