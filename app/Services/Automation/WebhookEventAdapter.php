@@ -1,7 +1,8 @@
 <?php
 namespace App\Services\Automation;
 class WebhookEventAdapter {
- public function adapt(array $p,string $event):?array {return match($event){'comment.received'=>$this->comment($p),'message.received'=>$this->message($p),default=>null};}
+ public function adapt(array $p,string $event):?array {return match($event){'comment.received'=>$this->comment($p),'message.received'=>$this->message($p),'analytics.synced'=>$this->analyticsSynced($p),default=>null};}
+ private function analyticsSynced(array $p):array {return ['event_type'=>'analytics.synced','event_id'=>$p['id']??null,'trigger'=>'analytics_synced','account_id'=>data_get($p,'account.accountId')??data_get($p,'account.id'),'sync'=>$p['sync']??[],'timestamp'=>$p['timestamp']??null];}
  private function comment(array $p):array {$c=data_get($p,'comment',[]);$author=data_get($c,'author',[]);$account=data_get($p,'account.accountId')??data_get($p,'account.id');return ['event_type'=>'comment.received','event_id'=>$p['id']??null,'trigger'=>'comment','account_id'=>$account,'post_id'=>data_get($c,'postId')??data_get($p,'post.id')??data_get($p,'postId'),'comment_id'=>data_get($c,'id')??data_get($p,'commentId'),'text'=>(string)(data_get($c,'text')??data_get($c,'message')??''),'username'=>data_get($author,'username')??'','full_name'=>data_get($author,'name')??'','user_id'=>data_get($author,'id')??data_get($author,'instagramId'),'instagram_profile'=>data_get($author,'instagramProfile',[]),'conversation_id'=>data_get($c,'conversationId'),'account_username'=>data_get($p,'account.username'),'post_url'=>data_get($p,'post.url')??data_get($c,'postUrl')];}
  private function message(array $p):?array {
   $m=data_get($p,'message',[]);
