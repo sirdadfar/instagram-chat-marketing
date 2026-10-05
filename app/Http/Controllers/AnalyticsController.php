@@ -24,11 +24,42 @@ class AnalyticsController extends Controller
         $accounts = InstagramAccount::where('status', 'active')->orderBy('username')->get();
         $selectedAccount = $accounts->firstWhere('id', $request->integer('account_id')) ?? $accounts->first();
         $account = $selectedAccount;
-        $insights = null; $followers = null; $demographics = null; $apiNotice = null;
+
+        $insights = null;
+        $followers = null;
+        $demographics = null;
+        $apiNotice = null;
+
         if ($account) {
-            try { $insights = $client->getInstagramAccountInsights($account->zernio_account_id); } catch (\Throwable $e) { report($e); $apiNotice = 'آمار حساب فعلاً در دسترس نیست.'; }
-            try { $followers = $client->getFollowerHistory($account->zernio_account_id); } catch (\Throwable $e) { report($e); }
-            try { $demographics = $client->getDemographics($account->zernio_account_id); } catch (\Throwable $e) { report($e); }
+            try {
+                $insights = $client->getInstagramAccountInsights($account->zernio_account_id, [
+                    'metrics' => 'reach,views,accounts_engaged,total_interactions,follows_and_unfollows',
+                    'metricType' => 'total_value',
+                ]);
+            } catch (\Throwable $e) {
+                report($e);
+                $apiNotice = 'آمار حساب فعلاً در دسترس نیست.';
+            }
+
+            try {
+                $followersResponse = $client->getFollowerHistory($account->zernio_account_id, [
+                    'metrics' => 'follower_count,followers_gained,followers_lost',
+                    'metricType' => 'time_series',
+                ]);
+                $followers = data_get($followersResponse, 'metrics.follower_count.values', []);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+
+            try {
+                $demographics = $client->getDemographics($account->zernio_account_id, [
+                    'metric' => 'follower_demographics',
+                    'breakdown' => 'age,city,country,gender',
+                    'timeframe' => 'this_month',
+                ]);
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
 
         return view('analytics.index', [
