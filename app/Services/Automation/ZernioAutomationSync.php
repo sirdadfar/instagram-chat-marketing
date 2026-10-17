@@ -88,7 +88,10 @@ final class ZernioAutomationSync
             'name' => $automation->name,
             'accountId' => $automation->account->zernio_account_id,
             'trigger' => $trigger,
-            'keywords' => $keywords,
+            'keywords' => ((bool) AppSetting::getValue('follow_gate_without_keywords', false)
+                && (bool) AppSetting::getValue('follow_gate_enabled', true)
+                && trim((string) $dmMessage) !== ''
+                && in_array($trigger, ['comment', 'story_reply'], true)) ? [] : $keywords,
             'matchMode' => $matchMode,
             'excludeKeywords' => $excluded,
             'isActive' => $automation->status === 'active',
