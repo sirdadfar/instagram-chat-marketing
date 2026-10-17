@@ -34,12 +34,23 @@
 
     // Theme
     const themeKey = 'instagram-panel-theme';
-    const storedTheme = localStorage.getItem(themeKey);
+    let storedTheme = null;
+    try { storedTheme = localStorage.getItem(themeKey); } catch (e) {}
     if (storedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
+    const syncThemeButton = () => {
+        const dark = document.documentElement.dataset.theme === 'dark';
+        const button = qs('[data-theme-toggle]');
+        if (button) {
+            button.setAttribute('aria-pressed', dark ? 'true' : 'false');
+            button.title = dark ? 'تغییر به پوسته روشن' : 'تغییر به پوسته تیره';
+        }
+    };
+    syncThemeButton();
     qs('[data-theme-toggle]')?.addEventListener('click', () => {
         const dark = document.documentElement.dataset.theme === 'dark';
         document.documentElement.dataset.theme = dark ? '' : 'dark';
-        localStorage.setItem(themeKey, dark ? 'light' : 'dark');
+        try { localStorage.setItem(themeKey, dark ? 'light' : 'dark'); } catch (e) {}
+        syncThemeButton();
     });
 
     // Confirmation modal
@@ -53,9 +64,15 @@
         confirmModal.classList.add('is-open');
         confirmModal.setAttribute('aria-hidden', 'false');
     }));
-    qs('[data-confirm-cancel]')?.addEventListener('click', () => { confirmForm = null; confirmModal?.classList.remove('is-open'); });
+    qs('[data-confirm-cancel]')?.addEventListener('click', () => { confirmForm = null; confirmModal?.classList.remove('is-open'); confirmModal?.setAttribute('aria-hidden','true'); });
     qs('[data-confirm-submit]')?.addEventListener('click', () => { if (confirmForm) confirmForm.submit(); });
-    confirmModal?.addEventListener('click', e => { if (e.target === confirmModal) confirmModal.classList.remove('is-open'); });
+    confirmModal?.addEventListener('click', e => { if (e.target === confirmModal) { confirmModal.classList.remove('is-open'); confirmModal.setAttribute('aria-hidden','true'); } });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && confirmModal?.classList.contains('is-open')) {
+            confirmModal.classList.remove('is-open');
+            confirmModal.setAttribute('aria-hidden','true');
+        }
+    });
 
     // Copy utilities
     const copyText = async (text) => {
