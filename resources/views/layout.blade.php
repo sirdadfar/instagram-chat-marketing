@@ -16,9 +16,10 @@
 </head>
 <body>
 @php
-    $layoutAccountCount = $accountCount ?? \App\Models\InstagramAccount::where('status', 'active')->count();
-    $layoutActiveAutomationCount = $activeAutomationCount ?? \App\Models\Automation::where('status', 'active')->count();
-    $layoutHumanConversationCount = $humanConversationCount ?? \App\Models\Conversation::where('needs_human', true)->count();
+    $accountIds = \App\Support\Tenancy::visibleAccountIds();
+    $layoutAccountCount = $accountCount ?? count($accountIds);
+    $layoutActiveAutomationCount = $activeAutomationCount ?? \App\Models\Automation::whereIn('instagram_account_id', $accountIds)->where('status', 'active')->count();
+    $layoutHumanConversationCount = $humanConversationCount ?? \App\Models\Conversation::whereIn('instagram_account_id', $accountIds)->where('needs_human', true)->count();
 @endphp
 <div class="app-shell" data-notifications-url="{{ route('notifications') }}">
     <div class="mobile-backdrop" data-mobile-backdrop></div>
@@ -55,6 +56,7 @@
             <a class="nav-item {{ request()->routeIs('logs') ? 'active' : '' }}" {{ request()->routeIs('logs') ? 'aria-current="page"' : '' }} href="{{ route('logs') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span><span>رویدادها</span></a>
             <a class="nav-item {{ request()->routeIs('system-health') ? 'active' : '' }}" {{ request()->routeIs('system-health') ? 'aria-current="page"' : '' }} href="{{ route('system-health') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v5c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V6z"/><path d="m8 12 2.5 2.5L16 9"/></svg></span><span>سلامت سیستم</span></a>
             <a class="nav-item {{ request()->routeIs('settings') ? 'active' : '' }}" {{ request()->routeIs('settings') ? 'aria-current="page"' : '' }} href="{{ route('settings') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="m19 13 2 1-2 3-2-1-2 2v2h-4v-2l-2-2-2 1-2-3 2-1V9L3 8l2-3 2 1 2-2V2h4v2l2 2 2-1 2 3-2 1z"/></svg></span><span>تنظیمات</span></a>
+            @if(auth()->user()?->isAdmin())<a class="nav-item {{ request()->routeIs('admin.users') ? 'active' : '' }}" {{ request()->routeIs('admin.users') ? 'aria-current="page"' : '' }} href="{{ route('admin.users') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="9.5" cy="7" r="3"/><path d="M16 4.5a3 3 0 0 1 0 5.9M19 20v-1a4 4 0 0 0-3-3.9"/></svg></span><span>مدیریت کاربران</span></a>@endif
         </nav>
 
         <div class="sidebar-footer">

@@ -8,7 +8,7 @@ class MediaLibrary extends Model
 {
     protected $table = 'media_library';
 
-    protected $fillable = ['name', 'type', 'url', 'mime_type', 'size', 'alt_text', 'metadata', 'active'];
+    protected $fillable = ['user_id', 'name', 'type', 'url', 'mime_type', 'size', 'alt_text', 'metadata', 'active'];
 
     protected $casts = [
         'metadata' => 'array',

@@ -6,8 +6,11 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\ContentController;
 use App\Http\Controllers\CommentsController;
 use App\Http\Controllers\OperationsController;
+use App\Http\Controllers\AdminUserController;
 Route::get('/login',[AuthController::class,'login'])->name('login');
 Route::post('/login',[AuthController::class,'authenticate'])->middleware('throttle:10,1')->name('login.authenticate');
+Route::get('/register',[AuthController::class,'register'])->name('register');
+Route::post('/register',[AuthController::class,'store'])->middleware('throttle:10,1')->name('register.store');
 Route::post('/logout',[AuthController::class,'logout'])->name('logout');
 Route::middleware('panel.auth')->group(function(){
  Route::get('/',fn()=>redirect()->route('dashboard'));
@@ -65,4 +68,14 @@ Route::middleware('panel.auth')->group(function(){
  Route::post('/media-library',[OperationsController::class,'storeMedia'])->name('media-library.store');
  Route::delete('/media-library/{media}',[OperationsController::class,'deleteMedia'])->name('media-library.destroy');
  Route::get('/system-health',[OperationsController::class,'health'])->name('system-health');
+});
+
+Route::middleware(['panel.auth', 'panel.admin'])->prefix('admin')->group(function(){
+ Route::get('/users',[AdminUserController::class,'index'])->name('admin.users');
+ Route::post('/users/{user}/suspend',[AdminUserController::class,'suspend'])->name('admin.users.suspend');
+ Route::post('/users/{user}/activate',[AdminUserController::class,'activate'])->name('admin.users.activate');
+ Route::post('/users/{user}/toggle-admin',[AdminUserController::class,'toggleAdmin'])->name('admin.users.toggle-admin');
+ Route::post('/users/{user}/reset-password',[AdminUserController::class,'resetPassword'])->name('admin.users.reset-password');
+ Route::delete('/users/{user}',[AdminUserController::class,'destroy'])->name('admin.users.destroy');
+ Route::post('/accounts/assign',[AdminUserController::class,'assignAccount'])->name('admin.accounts.assign');
 });

@@ -10,6 +10,7 @@ use App\Models\Conversation;
 use App\Models\InstagramAccount;
 use App\Models\WebhookEvent;
 use App\Services\Zernio\ZernioClient;
+use App\Support\Tenancy;
 use Illuminate\Http\Request;
 
 class AnalyticsController extends Controller
@@ -18,10 +19,10 @@ class AnalyticsController extends Controller
     {
         $days = collect(range(6, 0))->map(fn ($n) => now()->subDays($n)->startOfDay());
         $labels = $days->map(fn ($d) => $d->format('m/d'));
-        $runs = $days->map(fn ($d) => AutomationRun::whereBetween('created_at', [$d, $d->copy()->endOfDay()])->count());
-        $failed = $days->map(fn ($d) => AutomationRun::where('status', 'failed')->whereBetween('created_at', [$d, $d->copy()->endOfDay()])->count());
+        $runs = $days->map(fn ($d) => AutomationRun::whereIn('automation_id', Tenancy::visibleAutomationIds())->whereBetween('created_at', [$d, $d->copy()->endOfDay()])->count());
+        $failed = $days->map(fn ($d) => AutomationRun::whereIn('automation_id', Tenancy::visibleAutomationIds())->where('status', 'failed')->whereBetween('created_at', [$d, $d->copy()->endOfDay()])->count());
 
-        $accounts = InstagramAccount::where('status', 'active')->orderBy('username')->get();
+        $accounts = Tenancy::accounts()->where('status', 'active')->orderBy('username')->get();
         $selectedAccount = $accounts->firstWhere('id', $request->integer('account_id')) ?? $accounts->first();
         $account = $selectedAccount;
 
@@ -74,12 +75,12 @@ class AnalyticsController extends Controller
             'demographics' => $demographics,
             'apiNotice' => $apiNotice,
             'totals' => [
-                'runs' => AutomationRun::count(),
-                'success' => AutomationRun::where('status', 'completed')->count(),
-                'failed' => AutomationRun::where('status', 'failed')->count(),
-                'human' => Conversation::where('needs_human', true)->count(),
-                'events' => WebhookEvent::count(),
-                'errors' => AutomationLog::where('status', 'failed')->count(),
+                'runs' => AutomationRun::whereIn('automation_id', Tenancy::visibleAutomationIds())->count(),
+                'success' => AutomationRun::whereIn('automation_id', Tenancy::visibleAutomationIds())->where('status', 'completed')->count(),
+                'failed' => AutomationRun::whereIn('automation_id', Tenancy::visibleAutomationIds())->where('status', 'failed')->count(),
+                'human' => Conversation::whereIn('instagram_account_id', Tenancy::visibleAccountIds())->where('needs_human', true)->count(),
+                'events' => auth()->user()->isAdmin() ? WebhookEvent::count() : 0,
+                'errors' => AutomationLog::whereIn('automation_id', Tenancy::visibleAutomationIds())->where('status', 'failed')->count(),
             ],
         ]);
     }

@@ -16,6 +16,7 @@ use App\Services\Automation\AutomationEngine;
 use App\Services\Automation\ZernioAutomationSync;
 use App\Services\Zernio\ZernioClient;
 use App\Support\Credentials;
+use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\File;
 
@@ -23,18 +24,22 @@ class PanelController extends Controller
 {
     public function dashboard()
     {
+        $accountIds = Tenancy::visibleAccountIds();
+        $automationIds = Tenancy::visibleAutomationIds();
+        $isAdmin = auth()->user()->isAdmin();
+
         return view('dashboard.index', [
-            'accounts' => InstagramAccount::all(),
-            'automations' => Automation::withCount('logs')->orderBy('priority')->latest()->take(8)->get(),
-            'runs' => \App\Models\AutomationRun::latest()->take(10)->get(),
-            'conversations' => Conversation::with('contact')->latest('last_message_at')->take(6)->get(),
-            'events' => WebhookEvent::latest()->take(6)->get(),
+            'accounts' => Tenancy::accounts()->get(),
+            'automations' => Automation::withCount('logs')->whereIn('instagram_account_id', $accountIds)->orderBy('priority')->latest()->take(8)->get(),
+            'runs' => \App\Models\AutomationRun::whereIn('automation_id', $automationIds)->latest()->take(10)->get(),
+            'conversations' => Conversation::with('contact')->whereIn('instagram_account_id', $accountIds)->latest('last_message_at')->take(6)->get(),
+            'events' => $isAdmin ? WebhookEvent::latest()->take(6)->get() : collect(),
             'stats' => [
-                'automations' => Automation::count(),
-                'active' => Automation::where('status', 'active')->count(),
-                'runs' => \App\Models\AutomationRun::count(),
-                'failed' => AutomationLog::where('status', 'failed')->count(),
-                'human' => Conversation::where('needs_human', true)->count(),
+                'automations' => Automation::whereIn('instagram_account_id', $accountIds)->count(),
+                'active' => Automation::whereIn('instagram_account_id', $accountIds)->where('status', 'active')->count(),
+                'runs' => \App\Models\AutomationRun::whereIn('automation_id', $automationIds)->count(),
+                'failed' => AutomationLog::whereIn('automation_id', $automationIds)->where('status', 'failed')->count(),
+                'human' => Conversation::whereIn('instagram_account_id', $accountIds)->where('needs_human', true)->count(),
             ],
         ]);
     }
@@ -43,6 +48,7 @@ class PanelController extends Controller
     {
         return view('automations.index', [
             'automations' => Automation::with(['account', 'actions'])
+                ->whereIn('instagram_account_id', Tenancy::visibleAccountIds())
                 ->withCount(['logs', 'runs'])
                 ->orderBy('priority')
                 ->paginate(20),
@@ -51,12 +57,12 @@ class PanelController extends Controller
 
     public function create(ZernioClient $zernio)
     {
-        $accounts = InstagramAccount::orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+        $accounts = Tenancy::accounts()->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
             ->orderByDesc('created_at')
             ->get();
 
         // اگر حسابی هنوز در دیتابیس ثبت نشده، از Zernio به‌صورت خودکار همگام‌سازی کن.
-        if ($accounts->where('status', 'active')->isEmpty() && config('zernio.api_key')) {
+        if ($accounts->where('status', 'active')->isEmpty() && Credentials::zernioApiKey()) {
             try {
                 $response = $zernio->listAccounts(['platform' => 'instagram']);
                 $items = data_get($response, 'accounts');
@@ -77,18 +83,32 @@ class PanelController extends Controller
                     $providerStatus = strtolower((string) ($item['status'] ?? $item['connectionStatus'] ?? $item['state'] ?? 'active'));
                     $activeProviderStatuses = ['active', 'connected', 'authenticated', 'ready', 'online', 'enabled'];
 
-                    InstagramAccount::updateOrCreate(
-                        ['zernio_account_id' => (string) $accountId],
-                        [
-                            'username' => $item['username'] ?? data_get($item, 'metadata.username'),
-                            'name' => $item['name'] ?? $item['displayName'] ?? data_get($item, 'metadata.name'),
-                            'status' => in_array($providerStatus, $activeProviderStatuses, true) ? 'active' : 'inactive',
-                            'metadata' => $item,
-                        ]
-                    );
+                    $existingAccount = InstagramAccount::where('zernio_account_id', (string) $accountId)->first();
+
+                    if ($existingAccount) {
+                        // Owned by someone else or inactive → do not claim it.
+                        if ($existingAccount->user_id === auth()->id()) {
+                            $existingAccount->update([
+                                'username' => $item['username'] ?? data_get($item, 'metadata.username'),
+                                'name' => $item['name'] ?? $item['displayName'] ?? data_get($item, 'metadata.name'),
+                                'status' => in_array($providerStatus, $activeProviderStatuses, true) ? 'active' : 'inactive',
+                                'metadata' => $item,
+                            ]);
+                        }
+                        continue;
+                    }
+
+                    InstagramAccount::create([
+                        'zernio_account_id' => (string) $accountId,
+                        'user_id' => auth()->id(),
+                        'username' => $item['username'] ?? data_get($item, 'metadata.username'),
+                        'name' => $item['name'] ?? $item['displayName'] ?? data_get($item, 'metadata.name'),
+                        'status' => in_array($providerStatus, $activeProviderStatuses, true) ? 'active' : 'inactive',
+                        'metadata' => $item,
+                    ]);
                 }
 
-                $accounts = InstagramAccount::orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+                $accounts = Tenancy::accounts()->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
                     ->orderByDesc('created_at')
                     ->get();
             } catch (\Throwable $e) {
@@ -184,6 +204,33 @@ class PanelController extends Controller
         }
     }
 
+    /**
+     * 404 unless the automation belongs to a page the current user can see.
+     */
+    private function authorizeAccountById(int|string $accountId): void
+    {
+        if (! Tenancy::accounts()->whereKey($accountId)->exists()) {
+            abort(404);
+        }
+    }
+
+    private function authorizeAutomation(Automation $automation): void
+    {
+        if (! Tenancy::accounts()->whereKey($automation->instagram_account_id)->exists()) {
+            abort(404);
+        }
+    }
+
+    /**
+     * 404 unless the conversation belongs to a page the current user can see.
+     */
+    private function authorizeConversation(Conversation $conversation): void
+    {
+        if (! Tenancy::accounts()->whereKey($conversation->instagram_account_id)->exists()) {
+            abort(404);
+        }
+    }
+
     public function media(Request $request, ZernioClient $zernio)
     {
         $data = $request->validate([
@@ -193,7 +240,7 @@ class PanelController extends Controller
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $account = InstagramAccount::query()
+        $account = Tenancy::accounts()
             ->whereKey($data['account_id'])
             ->where('status', 'active')
             ->first();
@@ -416,7 +463,7 @@ class PanelController extends Controller
             'account_id' => ['required', 'integer', 'exists:instagram_accounts,id'],
         ]);
 
-        $account = InstagramAccount::query()
+        $account = Tenancy::accounts()
             ->whereKey($data['account_id'])
             ->where('status', 'active')
             ->first();
@@ -519,6 +566,9 @@ class PanelController extends Controller
             && (bool) ($d['follow_gate_enabled'] ?? AppSetting::getValue('follow_gate_enabled', true))
             && trim((string) ($d['private_reply'] ?? '')) !== '';
 
+        // The automation's page must belong to the current user.
+        $this->authorizeAccountById($d['instagram_account_id']);
+
         $a = Automation::create([
             'instagram_account_id' => $d['instagram_account_id'],
             'name' => $d['name'],
@@ -577,6 +627,7 @@ class PanelController extends Controller
 
     public function edit(Automation $automation)
     {
+        $this->authorizeAutomation($automation);
         $automation->load(['keywords', 'actions', 'nodes', 'edges', 'account']);
 
         return view('automations.edit', compact('automation'));
@@ -584,6 +635,7 @@ class PanelController extends Controller
 
     public function update(Request $r, Automation $automation, Audit $audit)
     {
+        $this->authorizeAutomation($automation);
         $d = $r->validate([
             'name' => 'required|string|max:120',
             'description' => 'nullable|string|max:1000',
@@ -695,6 +747,7 @@ class PanelController extends Controller
 
     public function toggle(Automation $automation, ZernioAutomationSync $nativeSync)
     {
+        $this->authorizeAutomation($automation);
         $previous = $automation->status;
         $automation->update([
             'status' => $automation->status === 'active' ? 'paused' : 'active',
@@ -722,6 +775,7 @@ class PanelController extends Controller
 
     public function destroy(Automation $automation, Audit $audit)
     {
+        $this->authorizeAutomation($automation);
         $before = $automation->toArray();
         $id = $automation->id;
         $automation->delete();
@@ -732,6 +786,7 @@ class PanelController extends Controller
 
     public function simulator(Request $r, Automation $automation, AutomationEngine $engine)
     {
+        $this->authorizeAutomation($automation);
         $ctx = $r->validate([
             'text' => 'nullable|string',
             'trigger' => 'required|string',
@@ -752,6 +807,7 @@ class PanelController extends Controller
             'contact',
             'messages' => fn ($query) => $query->latest()->limit(1),
         ])
+            ->whereIn('instagram_account_id', Tenancy::visibleAccountIds())
             ->orderByDesc('needs_human')
             ->orderByDesc('last_message_at');
 
@@ -766,6 +822,7 @@ class PanelController extends Controller
 
     public function conversation(Conversation $conversation)
     {
+        $this->authorizeConversation($conversation);
         $conversation->load(['contact.tags', 'messages' => fn ($query) => $query->oldest()]);
 
         return view('inbox.show', compact('conversation'));
@@ -773,6 +830,7 @@ class PanelController extends Controller
 
     public function sendMessage(Request $request, Conversation $conversation, ZernioClient $zernio)
     {
+        $this->authorizeConversation($conversation);
         $conversation->load('instagramAccount');
 
         $data = $request->validate([
@@ -886,6 +944,7 @@ class PanelController extends Controller
 
     public function archiveConversation(Conversation $conversation, ZernioClient $zernio)
     {
+        $this->authorizeConversation($conversation);
         $conversation->load('instagramAccount');
         if (! $conversation->instagramAccount) {
             return back()->withErrors(['conversation' => 'حساب این گفتگو در دسترس نیست.']);
@@ -908,6 +967,7 @@ class PanelController extends Controller
 
     public function reactMessage(Request $request, Conversation $conversation, string $message, ZernioClient $zernio)
     {
+        $this->authorizeConversation($conversation);
         $data = $request->validate(['emoji' => 'required|string|max:8']);
         $conversation->load('instagramAccount');
         if (! $conversation->instagramAccount) {
@@ -924,6 +984,7 @@ class PanelController extends Controller
 
     public function removeReaction(Conversation $conversation, string $message, ZernioClient $zernio)
     {
+        $this->authorizeConversation($conversation);
         $conversation->load('instagramAccount');
         if (! $conversation->instagramAccount) {
             return response()->json(['ok'=>false,'message'=>'حساب گفتگو در دسترس نیست.'], 422);
@@ -939,6 +1000,7 @@ class PanelController extends Controller
 
     public function markHuman(Conversation $conversation)
     {
+        $this->authorizeConversation($conversation);
         $conversation->update(['needs_human' => ! $conversation->needs_human]);
 
         if ($conversation->contact) {
@@ -950,15 +1012,17 @@ class PanelController extends Controller
 
     public function logs()
     {
+        $automationIds = Tenancy::visibleAutomationIds();
+
         return view('logs.index', [
-            'logs' => AutomationLog::with('automation')->latest()->paginate(50),
-            'events' => WebhookEvent::latest()->paginate(20),
+            'logs' => AutomationLog::with('automation')->whereIn('automation_id', $automationIds)->latest()->paginate(50),
+            'events' => auth()->user()->isAdmin() ? WebhookEvent::latest()->paginate(20) : WebhookEvent::query()->whereRaw('0=1')->paginate(20),
         ]);
     }
 
     public function settings(ZernioClient $zernio)
     {
-        $accounts = InstagramAccount::where('status', 'active')->orderBy('username')->get();
+        $accounts = Tenancy::accounts()->where('status', 'active')->orderBy('username')->get();
         $health = null;
         $iceBreakers = [];
         $selected = $accounts->first();
@@ -979,9 +1043,8 @@ class PanelController extends Controller
 
         return view('settings.index', [
             'accounts' => $accounts,
-            'zernioKeyStatus' => self::credentialStatusLabels(Credentials::status('zernio_api_key', 'zernio.api_key')),
+            'zernioKeyStatus' => self::credentialStatusLabels(Credentials::zernioKeyStatus()),
             'webhookSecretStatus' => self::credentialStatusLabels(Credentials::status('zernio_webhook_secret', 'zernio.webhook_secret')),
-            'panelPasswordStatus' => self::credentialStatusLabels(Credentials::status('panel_password', 'panel.auth_password_hash')),
             'followGateEnabled' => (bool) AppSetting::getValue('follow_gate_enabled', true),
             'followGateWithoutKeywords' => (bool) AppSetting::getValue('follow_gate_without_keywords', false),
             'followGateMessage' => (string) AppSetting::getValue('follow_gate_message', 'دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.'),
@@ -1000,7 +1063,7 @@ class PanelController extends Controller
     public function accountHealth(Request $request, ZernioClient $zernio)
     {
         $data = $request->validate(['account_id' => ['required','integer','exists:instagram_accounts,id']]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         try {
             return response()->json(['ok'=>true,'data'=>$zernio->getAccountHealth($account->zernio_account_id)]);
         } catch (\Throwable $e) {
@@ -1016,7 +1079,7 @@ class PanelController extends Controller
             'items' => ['nullable','array','max:4'],
             'items.*' => ['nullable','string','max:80'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         try {
             $items = array_values(array_filter(array_map(fn($v)=>trim((string)$v), $data['items'] ?? [])));
             $result = $zernio->saveIceBreakers($account->zernio_account_id, array_map(fn($q)=>['question'=>$q], $items));
@@ -1048,9 +1111,16 @@ class PanelController extends Controller
 
         AppSetting::setValue('business_hours', $hours);
 
-        Credentials::remember('zernio_api_key', $r->input('zernio_api_key'));
-        Credentials::remember('zernio_webhook_secret', $r->input('zernio_webhook_secret'));
-        Credentials::remember('panel_password', $r->input('panel_password'));
+        // Per-user service key; clearing checkbox revokes the personal key.
+        Credentials::rememberUserKey($r->user(), $r->input('zernio_api_key'));
+        if ($r->boolean('zernio_api_key_clear')) {
+            $r->user()->forceFill(['zernio_api_key_enc' => null])->save();
+        }
+
+        // Server-wide webhook secret: admins only.
+        if ($r->user()->isAdmin()) {
+            Credentials::setGlobalWebhookSecret($r->input('zernio_webhook_secret'));
+        }
 
         Automation::with(['keywords','actions','account'])
             ->whereIn('trigger', ['comment','story_reply'])
@@ -1075,6 +1145,7 @@ class PanelController extends Controller
     private static function credentialStatusLabels(string $status): string
     {
         return match ($status) {
+            'personal' => 'کلید شخصی شما',
             'custom' => 'از تنظیمات پنل',
             'env' => 'از .env',
             default => 'تنظیم نشده',

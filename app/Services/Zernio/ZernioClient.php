@@ -12,9 +12,20 @@ use RuntimeException;
 
 class ZernioClient
 {
+    /** Optional user context; jobs set this to the page owner. */
+    private ?\App\Models\User $user = null;
+
+    /** Pin this client's requests to a specific user's key (queue context). */
+    public function forUser(?\App\Models\User $user): static
+    {
+        $this->user = $user;
+
+        return $this;
+    }
+
     public function request(): PendingRequest
     {
-        $key = Credentials::zernioApiKey();
+        $key = Credentials::zernioApiKey($this->user);
 
         if (! $key) {
             throw new RuntimeException('کلید دسترسی سرویس تنظیم نشده است (تنظیمات پنل یا .env).');

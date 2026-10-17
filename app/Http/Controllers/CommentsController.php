@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Models\InstagramAccount;
 use App\Services\Zernio\ZernioClient;
+use App\Support\Tenancy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,7 +14,7 @@ class CommentsController extends Controller
 {
     public function index(Request $request, ZernioClient $client)
     {
-        $accounts = InstagramAccount::where('status', 'active')->orderBy('username')->get();
+        $accounts = Tenancy::accounts()->where('status', 'active')->orderBy('username')->get();
         return view('comments.index', [
             'accounts' => $accounts,
             'selectedAccount' => $accounts->firstWhere('id', (int) $request->integer('account_id')) ?? $accounts->first(),
@@ -28,7 +29,7 @@ class CommentsController extends Controller
             'cursor' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
         $query = [];
         if (!empty($data['cursor'])) $query['cursor'] = $data['cursor'];
 
@@ -53,7 +54,7 @@ class CommentsController extends Controller
             'comment_id' => ['required', 'string', 'max:255'],
             'message' => ['required', 'string', 'max:2200'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
         try {
             $result = $client->replyToComment($data['post_id'], $data['comment_id'], $account->zernio_account_id, $data['message']);
             return response()->json(['ok' => true, 'data' => $result]);
@@ -72,7 +73,7 @@ class CommentsController extends Controller
             'quick_replies_json' => ['nullable','string','max:10000'],
             'buttons_json' => ['nullable','string','max:10000'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         $body = ['message' => $data['message']];
         $quick = json_decode($data['quick_replies_json'] ?? '', true);
         $buttons = json_decode($data['buttons_json'] ?? '', true);
@@ -104,7 +105,7 @@ class CommentsController extends Controller
             'post_id' => ['required', 'string', 'max:255'],
             'comment_id' => ['required', 'string', 'max:255'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
         try {
             $result = $client->unhideComment($data['post_id'], $data['comment_id'], $account->zernio_account_id);
             return response()->json(['ok' => true, 'data' => $result]);
@@ -120,7 +121,7 @@ class CommentsController extends Controller
             'post_id' => ['required', 'string', 'max:255'],
             'comment_id' => ['required', 'string', 'max:255'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
         try {
             $result = $client->unlikeComment($data['post_id'], $data['comment_id'], $account->zernio_account_id);
             return response()->json(['ok' => true, 'data' => $result]);
@@ -137,7 +138,7 @@ class CommentsController extends Controller
             'post_id' => ['required', 'string', 'max:255'],
             'comment_id' => ['required', 'string', 'max:255'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
         try {
             $result = $client->likeComment($data['post_id'], $data['comment_id'], $account->zernio_account_id);
             return response()->json(['ok' => true, 'data' => $result]);
@@ -153,7 +154,7 @@ class CommentsController extends Controller
             'post_id' => ['required', 'string', 'max:255'],
             'comment_id' => ['required', 'string', 'max:255'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
         try {
             $result = match ($action) {
                 'delete' => $client->deleteComment($data['post_id'], $data['comment_id'], $account->zernio_account_id),

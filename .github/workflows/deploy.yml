@@ -111,6 +111,7 @@ jobs:
           cd "$APP_PATH"
           composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
           php artisan migrate --force
+          php artisan panel:adopt-legacy || true
           php artisan optimize:clear
           php artisan config:cache
           php artisan route:cache

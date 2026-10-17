@@ -5,26 +5,63 @@ declare(strict_types=1);
 namespace App\Support;
 
 use App\Models\AppSetting;
+use App\Models\InstagramAccount;
+use App\Models\User;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
  * Resolves runtime credentials with this priority:
- *   1. Value saved from the Settings screen (stored encrypted in the DB).
- *   2. Fallback from config (originally sourced from .env, cache-safe).
- *
- * Anything saved here beats the environment, so every user can configure
- * the panel from the UI without touching .env.
+ *   1. The page/user owner's own key (set from the Settings screen, encrypted in DB).
+ *   2. Value saved from the Settings screen by an admin (stored encrypted).
+ *   3. Fallback from config (originally sourced from .env, cache-safe).
  */
 final class Credentials
 {
     /** Encrypted-at-rest marker prefix. */
     private const ENC_PREFIX = 'enc:';
 
-    public static function zernioApiKey(): ?string
+    public static function zernioApiKey(?User $context = null): ?string
     {
+        // 1) explicit context (jobs: page owner)
+        if ($context !== null && is_string($context->zernio_api_key_enc) && $context->zernio_api_key_enc !== '') {
+            return self::decrypt($context->zernio_api_key_enc);
+        }
+
+        // 2) session user's own key (web requests)
+        $user = auth()->user();
+        if ($user instanceof User && is_string($user->zernio_api_key_enc) && $user->zernio_api_key_enc !== '') {
+            return self::decrypt($user->zernio_api_key_enc);
+        }
+
+        // 3) global: admin's Settings value, then .env
         return self::storedOrConfig('zernio_api_key', 'zernio.api_key');
+    }
+
+    /** Stores (or clears) the service key on the given user. */
+    public static function rememberUserKey(User $user, mixed $plain): void
+    {
+        $value = trim((string) $plain);
+
+        if ($value === '') {
+            return;
+        }
+
+        if ($value === '__clear__') {
+            $user->forceFill(['zernio_api_key_enc' => null])->save();
+            return;
+        }
+
+        $user->forceFill([
+            'zernio_api_key_enc' => self::ENC_PREFIX . Crypt::encryptString($value),
+        ])->save();
+    }
+
+    /** Webhook secret is server-wide; only admins manage it. */
+    public static function setGlobalWebhookSecret(mixed $plain): void
+    {
+        self::remember('zernio_webhook_secret', $plain);
     }
 
     public static function zernioWebhookSecret(): ?string
@@ -78,6 +115,17 @@ final class Credentials
         return filled(config($configKey)) ? 'env' : 'none';
     }
 
+    /** Status of the effective Zernio key for the session user ('personal'|'custom'|'env'|'none'). */
+    public static function zernioKeyStatus(string $configKey = 'zernio.api_key'): string
+    {
+        $user = auth()->user();
+        if ($user instanceof User && filled($user->zernio_api_key_enc)) {
+            return 'personal';
+        }
+
+        return self::status('zernio_api_key', $configKey);
+    }
+
     private static function stored(string $key): ?string
     {
         $raw = AppSetting::query()->where('key', $key)->value('value');
@@ -87,11 +135,7 @@ final class Credentials
         }
 
         if (Str::startsWith($raw, self::ENC_PREFIX)) {
-            try {
-                return Crypt::decryptString(substr($raw, strlen(self::ENC_PREFIX)));
-            } catch (\Throwable) {
-                return null; // corrupted entry → fall through to env
-            }
+            return self::decrypt($raw);
         }
 
         return $raw;
@@ -108,6 +152,15 @@ final class Credentials
         $config = config($configKey);
 
         return (is_string($config) && $config !== '') ? $config : null;
+    }
+
+    private static function decrypt(string $raw): ?string
+    {
+        try {
+            return Crypt::decryptString(substr($raw, strlen(self::ENC_PREFIX)));
+        } catch (\Throwable) {
+            return null; // corrupted entry → fall back to next source
+        }
     }
 
     private static function looksLikeBcrypt(string $value): bool

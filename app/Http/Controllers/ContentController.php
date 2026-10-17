@@ -8,6 +8,7 @@ use App\Models\InstagramAccount;
 use App\Models\InstagramPost;
 use App\Models\InstagramStory;
 use App\Services\Zernio\ZernioClient;
+use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -15,7 +16,7 @@ class ContentController extends Controller
 {
     public function index(Request $request, ZernioClient $client)
     {
-        $accounts = InstagramAccount::where('status', 'active')->orderBy('username')->get();
+        $accounts = Tenancy::accounts()->where('status', 'active')->orderBy('username')->get();
         $selected = $accounts->firstWhere('id', (int) $request->integer('account_id')) ?? $accounts->first();
         $posts = collect(); $stories = collect(); $notice = null;
         if ($selected) {
@@ -29,7 +30,7 @@ class ContentController extends Controller
 
     public function create()
     {
-        $accounts = InstagramAccount::where('status', 'active')->orderBy('username')->get();
+        $accounts = Tenancy::accounts()->where('status', 'active')->orderBy('username')->get();
         return view('content.create', [
             'accounts' => $accounts,
             'selected' => $accounts->first(),
@@ -66,7 +67,7 @@ class ContentController extends Controller
             'user_tags_json' => ['nullable','string','max:20000'],
         ]);
 
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         $mediaItems = json_decode($data['media_items_json'], true);
         if (!is_array($mediaItems) || $mediaItems === []) return back()->withErrors(['media_items_json' => 'حداقل یک رسانه انتخاب کنید.'])->withInput();
 
@@ -150,7 +151,7 @@ class ContentController extends Controller
     public function destroy(Request $request, ZernioClient $client)
     {
         $id = $request->validate(['post_id'=>['required','string','max:255'],'account_id'=>['required','integer','exists:instagram_accounts,id']]);
-        $account = InstagramAccount::whereKey($id['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($id['account_id'])->where('status','active')->firstOrFail();
         try { $client->deletePost($id['post_id']); return back()->with('success','محتوا حذف یا لغو شد.'); }
         catch (\Throwable $e) { report($e); return back()->withErrors(['content'=>'حذف محتوا انجام نشد.']); }
     }
@@ -161,7 +162,7 @@ class ContentController extends Controller
             'account_id' => ['required','integer','exists:instagram_accounts,id'],
             'limit' => ['nullable','integer','min:1','max:100'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         try {
             $result = $client->listInstagramAudio($account->zernio_account_id, ['limit' => $data['limit'] ?? 30]);
             $items = data_get($result, 'audio', data_get($result, 'audios', data_get($result, 'data.audio', data_get($result, 'data.audios', []))));
@@ -185,7 +186,7 @@ class ContentController extends Controller
             'account_id'=>['required','integer','exists:instagram_accounts,id'],
             'post_id'=>['required','string','max:255'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         try {
             return response()->json(['ok'=>true,'data'=>$client->likePost($data['post_id'], $account->zernio_account_id)]);
         } catch (\Throwable $e) {
@@ -200,7 +201,7 @@ class ContentController extends Controller
             'account_id'=>['required','integer','exists:instagram_accounts,id'],
             'post_id'=>['required','string','max:255'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         try {
             return response()->json(['ok'=>true,'data'=>$client->unlikePost($data['post_id'], $account->zernio_account_id)]);
         } catch (\Throwable $e) {
@@ -217,7 +218,7 @@ class ContentController extends Controller
             'from_date'=>['nullable','date'],
             'to_date'=>['nullable','date'],
         ]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         $query = [];
         if (!empty($data['from_date'])) $query['fromDate'] = $data['from_date'];
         if (!empty($data['to_date'])) $query['toDate'] = $data['to_date'];
@@ -232,7 +233,7 @@ class ContentController extends Controller
     public function storyInsights(Request $request, ZernioClient $client)
     {
         $data = $request->validate(['account_id'=>['required','integer','exists:instagram_accounts,id'],'story_id'=>['required','string','max:255']]);
-        $account = InstagramAccount::whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
         try { return response()->json(['ok'=>true,'data'=>$client->getStoryInsights($account->zernio_account_id, $data['story_id'])]); }
         catch (\Throwable $e) { report($e); return response()->json(['ok'=>false,'message'=>'آمار استوری در دسترس نیست.'],422); }
     }
