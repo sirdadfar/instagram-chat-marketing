@@ -45,16 +45,19 @@ class AdoptLegacyData extends Command
             return $admin;
         }
 
-        $email = strtolower(trim((string) ($this->option('email') ?: env('PANEL_ADMIN_EMAIL', 'admin@localhost'))));
+        $email = strtolower(trim((string) ($this->option('email') ?: env('PANEL_ADMIN_EMAIL', ''))));
+        $email = $email !== '' ? $email : null;
 
-        $admin = User::query()->where('email', $email)->first();
+        $admin = $email !== null ? User::query()->where('email', $email)->first() : null;
 
         if ($admin === null) {
             // Prefer the configured/stored panel password, otherwise generate one and show it.
             $passwordPlain = $this->resolveInitialPassword();
+            $username = $this->resolveAdminUsername($admin === null);
 
             $admin = User::create([
                 'name' => (string) env('PANEL_ADMIN_LABEL', 'مدیر سامانه'),
+                'username' => $username,
                 'email' => $email,
                 'password' => $passwordPlain,
                 'is_admin' => true,
@@ -77,6 +80,27 @@ class AdoptLegacyData extends Command
     }
 
     private ?string $generatedPassword = null;
+
+    private function resolveAdminUsername(bool $_create): string
+    {
+        $base = mb_strtolower(trim((string) env('PANEL_ADMIN_USERNAME', '')));
+        if ($base === '') {
+            $emailConfig = mb_strtolower(trim((string) env('PANEL_ADMIN_EMAIL', '')));
+            $base = $emailConfig !== '' ? explode('@', $emailConfig)[0] : 'admin';
+            $base = (string) preg_replace('/[^a-z0-9_.-]/i', '', $base);
+            if ($base === '') {
+                $base = 'admin';
+            }
+        }
+
+        $username = $base;
+        $i = 1;
+        while (User::query()->where('username', $username)->exists()) {
+            $username = $base . $i++;
+        }
+
+        return $username;
+    }
 
     private function resolveInitialPassword(): string
     {

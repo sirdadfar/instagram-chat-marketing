@@ -11,7 +11,7 @@ class User extends Model
 {
     use Notifiable;
 
-    protected $fillable = ['name', 'email', 'password', 'is_admin', 'status', 'zernio_api_key_enc'];
+    protected $fillable = ['name', 'username', 'email', 'password', 'is_admin', 'status', 'zernio_api_key_enc'];
     protected $hidden = ['password', 'remember_token', 'zernio_api_key_enc'];
     protected $casts = [
         'password' => 'hashed',
