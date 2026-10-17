@@ -37,4 +37,40 @@
 @empty<div class="empty-state"><strong>گزارشی ثبت نشده</strong></div>@endforelse
 </div><div class="pagination-wrap">{{ $logs->links() }}</div></section>
 <section class="panel-card"><div class="section-head"><div><div class="eyebrow">Webhook</div><h2>رویدادهای ورودی</h2></div></div><div class="event-table">@forelse($events as $event)<div class="event-row"><span class="event-status active"></span><div class="row-main"><strong>{{ $event->event_type }}</strong><small>{{ $event->created_at?->diffForHumans() }}</small></div><span class="soft-tag">{{ $event->status }}</span><code>{{ $event->error ?: Str::limit((string)$event->event_id,22,'…') }}</code></div>@empty<div class="empty-state"><strong>رویدادی ثبت نشده</strong></div>@endforelse</div><div class="pagination-wrap">{{ $events->links() }}</div></section></div>
+
+<style>
+/* خوانایی و نمایش حرفه‌ای داده‌های ساختاریافته در گزارش‌ها */
+.event-details { min-width: 0; }
+.event-details > summary {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin: 10px 0 4px; padding: 8px 12px; border-radius: 10px;
+    color: #2563eb; background: rgba(37, 99, 235, .09);
+    border: 1px solid rgba(37, 99, 235, .2); font-weight: 700;
+    cursor: pointer; transition: background .18s ease, border-color .18s ease;
+}
+.event-details > summary:hover { background: rgba(37, 99, 235, .15); border-color: rgba(37, 99, 235, .38); }
+.event-details[open] > summary { margin-bottom: 12px; }
+.event-details h4 { margin: 14px 0 8px; font-size: .9rem; font-weight: 800; }
+.event-details pre {
+    display: block; box-sizing: border-box; width: 100%; max-width: 100%;
+    max-height: 380px; overflow: auto; margin: 10px 0 14px; padding: 18px;
+    border: 1px solid #334155; border-radius: 12px;
+    background: #0b1220 !important; color: #e2e8f0 !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 6px 18px rgba(15,23,42,.12);
+    direction: ltr; text-align: left; white-space: pre;
+    font: 12.5px/1.8 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    tab-size: 2; scrollbar-color: #475569 #111827; scrollbar-width: thin;
+}
+.event-details pre::selection { background: #2563eb; color: #fff; }
+.event-details .action-result {
+    margin: 8px 0; padding: 11px 13px; border-radius: 10px;
+    border: 1px solid var(--border, #e2e8f0); background: rgba(148,163,184,.07);
+    overflow-wrap: anywhere;
+}
+.event-details .error-text { color: #dc2626; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+    .event-details pre { max-height: 300px; padding: 12px; font-size: 11.5px; border-radius: 9px; }
+    .event-details > summary { padding: 7px 10px; font-size: .85rem; }
+}
+</style>
 @endsection
