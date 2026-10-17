@@ -7,7 +7,7 @@ use App\Http\Controllers\ContentController;
 use App\Http\Controllers\CommentsController;
 use App\Http\Controllers\OperationsController;
 Route::get('/login',[AuthController::class,'login'])->name('login');
-Route::post('/login',[AuthController::class,'authenticate'])->name('login.authenticate');
+Route::post('/login',[AuthController::class,'authenticate'])->middleware('throttle:10,1')->name('login.authenticate');
 Route::post('/logout',[AuthController::class,'logout'])->name('logout');
 Route::middleware('panel.auth')->group(function(){
  Route::get('/',fn()=>redirect()->route('dashboard'));

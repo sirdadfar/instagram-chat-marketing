@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use App\Support\Credentials;
 use Illuminate\View\View;
 
 class AuthController extends Controller
@@ -28,7 +29,7 @@ class AuthController extends Controller
             'password.required' => 'رمز عبور را وارد کنید.',
         ]);
 
-        $configuredHash = (string) config('panel.auth_password_hash', env('PANEL_ADMIN_PASSWORD_HASH', ''));
+        $configuredHash = Credentials::panelPasswordHash();
 
         if ($configuredHash === '' || !Hash::check($data['password'], $configuredHash)) {
             return back()

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Zernio;
 
+use App\Support\Credentials;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -13,10 +14,10 @@ class ZernioClient
 {
     public function request(): PendingRequest
     {
-        $key = config('zernio.api_key');
+        $key = Credentials::zernioApiKey();
 
         if (! $key) {
-            throw new RuntimeException('ZERNIO_API_KEY is not configured.');
+            throw new RuntimeException('کلید دسترسی سرویس تنظیم نشده است (تنظیمات پنل یا .env).');
         }
 
         return Http::baseUrl(rtrim((string) config('zernio.base_url'), ' /'))
@@ -281,10 +282,10 @@ class ZernioClient
      */
     public function uploadMediaDirect(UploadedFile $file): array
     {
-        $key = config('zernio.api_key');
+        $key = Credentials::zernioApiKey();
 
         if (! $key) {
-            throw new RuntimeException('ZERNIO_API_KEY is not configured.');
+            throw new RuntimeException('کلید دسترسی سرویس تنظیم نشده است (تنظیمات پنل یا .env).');
         }
 
         $handle = fopen($file->getRealPath(), 'rb');

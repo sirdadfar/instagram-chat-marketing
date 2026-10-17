@@ -15,6 +15,7 @@ use App\Services\Automation\Audit;
 use App\Services\Automation\AutomationEngine;
 use App\Services\Automation\ZernioAutomationSync;
 use App\Services\Zernio\ZernioClient;
+use App\Support\Credentials;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\File;
 
@@ -978,6 +979,9 @@ class PanelController extends Controller
 
         return view('settings.index', [
             'accounts' => $accounts,
+            'zernioKeyStatus' => self::credentialStatusLabels(Credentials::status('zernio_api_key', 'zernio.api_key')),
+            'webhookSecretStatus' => self::credentialStatusLabels(Credentials::status('zernio_webhook_secret', 'zernio.webhook_secret')),
+            'panelPasswordStatus' => self::credentialStatusLabels(Credentials::status('panel_password', 'panel.auth_password_hash')),
             'followGateEnabled' => (bool) AppSetting::getValue('follow_gate_enabled', true),
             'followGateWithoutKeywords' => (bool) AppSetting::getValue('follow_gate_without_keywords', false),
             'followGateMessage' => (string) AppSetting::getValue('follow_gate_message', 'دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.'),
@@ -1044,6 +1048,10 @@ class PanelController extends Controller
 
         AppSetting::setValue('business_hours', $hours);
 
+        Credentials::remember('zernio_api_key', $r->input('zernio_api_key'));
+        Credentials::remember('zernio_webhook_secret', $r->input('zernio_webhook_secret'));
+        Credentials::remember('panel_password', $r->input('panel_password'));
+
         Automation::with(['keywords','actions','account'])
             ->whereIn('trigger', ['comment','story_reply'])
             ->where('status', 'active')
@@ -1062,6 +1070,15 @@ class PanelController extends Controller
     public function notifications()
     {
         return response()->json(Notification::latest()->take(30)->get());
+    }
+
+    private static function credentialStatusLabels(string $status): string
+    {
+        return match ($status) {
+            'custom' => 'از تنظیمات پنل',
+            'env' => 'از .env',
+            default => 'تنظیم نشده',
+        };
     }
 
     private function syncNativeAutomation(Automation $automation): void
