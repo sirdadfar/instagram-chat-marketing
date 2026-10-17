@@ -38,9 +38,12 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
     if(($result['status']??null)==='waiting_follow') break;
   }
   $waitingFollow=collect($results)->contains(fn($r)=>($r['status']??null)==='waiting_follow');
-  if(!$waitingFollow)$engine->markRun($a,$data['user_id']??null);
-  $run->update(['status'=>$waitingFollow?'pending':'completed','result'=>$results,'finished_at'=>$waitingFollow?null:now()]);
-  $engine->log($a,$context,$eval,$waitingFollow?'gated':'executed',null,$results);if($waitingFollow)break;}$event->update(['status'=>'processed','processed_at'=>now()]);}
+  $failedAction=collect($results)->first(fn($r)=>($r['status']??null)==='failed');
+  $actionFailed=(bool)$failedAction;
+  if(!$waitingFollow && !$actionFailed)$engine->markRun($a,$data['user_id']??null);
+  $run->update(['status'=>$waitingFollow?'pending':($actionFailed?'failed':'completed'),'result'=>$results,'error'=>$failedAction['error']??null,'finished_at'=>$waitingFollow?null:now()]);
+  $logStatus=$waitingFollow?'gated':($actionFailed?'failed':'executed');
+  $engine->log($a,$context,$eval,$logStatus,$failedAction['error']??null,$results);if($waitingFollow)break;}$event->update(['status'=>'processed','processed_at'=>now()]);}
  private function persistInbox(InstagramAccount $account,array $d):void {if(empty($d['conversation_id']))return;$contact=null;if(!empty($d['user_id'])){$contact=Contact::updateOrCreate(['instagram_account_id'=>$account->id,'external_user_id'=>$d['user_id']],['username'=>$d['username']??null,'full_name'=>$d['full_name']??null,'is_follower'=>data_get($d,'instagram_profile.isFollower'),'follower_count'=>data_get($d,'instagram_profile.followerCount'),'is_verified'=>data_get($d,'instagram_profile.isVerified'),'last_seen_at'=>now()]);$metadata=is_array($contact->metadata)?$contact->metadata:[];$profile=is_array($d['instagram_profile']??null)?$d['instagram_profile']:[];$contact->update(['metadata'=>array_merge($metadata,$profile)]);}$conv=Conversation::updateOrCreate(['zernio_conversation_id'=>$d['conversation_id']],['instagram_account_id'=>$account->id,'contact_id'=>$contact?->id,'last_message_at'=>now(),'last_inbound_at'=>now()] );$conv->update(['unread_count'=>$conv->unread_count+1,'last_message_at'=>now(),'last_inbound_at'=>now()]);if(!empty($d['event_id']))Message::firstOrCreate(['external_message_id'=>$d['message_id']??$d['event_id']],['conversation_id'=>$conv->id,'direction'=>'inbound','type'=>'text','text'=>$d['text']??null,'status'=>'received','source'=>'zernio','attachments'=>$d['attachments']??[],'metadata'=>$d,'sent_at'=>now()]);}
  private function handleFollowGateCallback(InstagramAccount $account,array $data,AutomationEngine $engine,ActionExecutor $executor,ZernioClient $zernio):bool {
   if(empty($data['user_id'])||empty($data['conversation_id'])) return false;
@@ -80,7 +83,9 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   $results=[];
   foreach($automation->actions->sortBy('sort_order') as $action){$result=$executor->execute($automation,$action->toArray(),$context);$results[]=$result;if(($result['status']??null)==='waiting_follow')break;}
   if(!collect($results)->contains(fn($r)=>($r['status']??null)==='waiting_follow')){
-    $engine->markRun($automation,$data['user_id']??null);$engine->log($automation,$context,['keywords'=>['pass'=>true]],'executed',null,$results);
+    $failedAction=collect($results)->first(fn($r)=>($r['status']??null)==='failed');
+    if(!$failedAction)$engine->markRun($automation,$data['user_id']??null);
+    $engine->log($automation,$context,['keywords'=>['pass'=>true]],$failedAction?'failed':'executed',$failedAction['error']??null,$results);
     $metadata=is_array($contact->metadata)?$contact->metadata:[];unset($metadata['follow_gate_pending']);$contact->update(['metadata'=>$metadata,'is_follower'=>true]);
   }
   return true;
