@@ -3,7 +3,7 @@
 @section('page_hint','روند رشد، تعامل و رفتار مخاطبان را از یک صفحه ببین')
 @section('content')
 <div class="analytics-hero"><div class="analytics-hero-mark">↗</div><div><span class="analytics-kicker">INSIGHTS CENTER</span><h1>تصمیم‌گیری با داده‌های واقعی</h1><p>عملکرد حساب، رشد مخاطبان و کیفیت تعامل را در یک نگاه بررسی کن.</p></div><div class="analytics-hero-meta"><span class="analytics-live-dot"></span> گزارش تحلیلی <b>{{ now()->format('Y/m/d') }}</b></div></div>
-<div class="page-header-row"><div><div class="eyebrow">تحلیل</div><h1>تحلیل و آمار</h1><p>آمار حساب و روند دنبال‌کننده‌ها را در کنار عملکرد اتوماسیون‌ها بررسی کن.</p></div><div class="select-shell"><span>حساب</span><select onchange="window.location='{{ route('analytics') }}?account_id='+this.value">@foreach($accounts as $account)<option value="{{ $account->id }}" @selected($selectedAccount?->id===$account->id)>{{ '@'.($account->username ?: 'instagram') }}</option>@endforeach</select></div></div>
+<div class="page-header-row analytics-account-row"><div class="select-shell"><span>حساب اینستاگرام</span><select aria-label="انتخاب حساب اینستاگرام" onchange="window.location='{{ route('analytics') }}?account_id='+this.value">@foreach($accounts as $account)<option value="{{ $account->id }}" @selected($selectedAccount?->id===$account->id)>{{ '@'.($account->username ?: 'instagram') }}</option>@endforeach</select></div></div>
 @if(!empty($apiNotice))<div class="help-box">{{ $apiNotice }}</div>@endif
 <div class="analytics-section-title"><div><span>ACCOUNT PERFORMANCE</span><h2>شاخص‌های کلیدی حساب</h2></div><p>داده‌های دریافتی از اینستاگرام</p></div>
 <div class="insight-grid insight-grid-large analytics-kpi-grid">
