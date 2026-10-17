@@ -18,10 +18,26 @@
 </div>
 <div class="automation-grid">
 @forelse($templates as $template)
-<article class="automation-card automation-card-premium"><div class="automation-card-top"><div><strong>{{ $template->name }}</strong><span>{{ $template->category }} · {{ $template->active ? 'فعال' : 'متوقف' }}</span></div>
+@php
+    $templateVariables = is_array($template->variables) ? $template->variables : [];
+    $templateCategories = ['general' => 'عمومی', 'sales' => 'فروش', 'support' => 'پشتیبانی', 'follow_gate' => 'بررسی فالو'];
+@endphp
+<article class="automation-card automation-card-premium"><div class="automation-card-top"><div><strong>{{ $template->name }}</strong><span>{{ $templateCategories[$template->category] ?? $template->category }} · {{ $template->active ? 'فعال' : 'متوقف' }}</span></div>
 <div class="card-menu"><form method="POST" action="{{ route('templates.toggle',$template) }}">@csrf<button class="quick-icon" title="تغییر وضعیت">{{ $template->active ? 'Ⅱ' : '▶' }}</button></form><form method="POST" action="{{ route('templates.destroy',$template) }}">@csrf @method('DELETE')<button class="quick-icon danger-soft">×</button></form></div></div>
-<div class="panel-card"><p style="white-space:pre-wrap">{{ $template->body }}</p></div><div class="automation-card-footer"><div>@foreach($template->variables ?? [] as $v)<span class="soft-tag">{{ $v }}</span>@endforeach</div></div></article>
+<div class="panel-card"><p style="white-space:pre-wrap">{{ $template->body }}</p></div><div class="automation-card-footer"><div>@foreach($templateVariables as $v)<span class="soft-tag">{{ $v }}</span>@endforeach</div></div></article>
 @empty<div class="empty-state span-full"><strong>هنوز قالبی ساخته نشده</strong></div>@endforelse
 </div>
 <div class="pagination-wrap">{{ $templates->links() }}</div>
 @endsection
+
+<style>
+.template-library-intro{max-width:780px}
+.studio-grid{align-items:start;gap:18px}
+.studio-grid>.panel-card,.automation-card-premium{border:1px solid rgba(148,163,184,.2);box-shadow:0 10px 28px rgba(15,23,42,.04)}
+.automation-card-premium{min-width:0;overflow:hidden}
+.automation-card-premium>.panel-card{margin:14px 0;padding:14px;background:rgba(148,163,184,.045);border:1px solid rgba(148,163,184,.17);overflow-wrap:anywhere}
+.automation-card-premium>.panel-card p{margin:0;line-height:1.95;overflow-wrap:anywhere}
+.automation-card-premium .automation-card-footer{gap:8px}
+.automation-card-premium .automation-card-footer>div{display:flex;gap:6px;flex-wrap:wrap}
+@media(max-width:700px){.studio-grid{grid-template-columns:minmax(0,1fr);gap:14px}.automation-card-premium{padding:14px}.automation-card-top{gap:10px}.automation-card-top strong{overflow-wrap:anywhere}}
+</style>
