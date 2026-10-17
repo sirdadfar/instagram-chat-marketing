@@ -58,7 +58,7 @@
     <div class="account-inline-title"><span>حساب</span><small id="selectedAccountCaption">انتخاب نشده</small></div>
     <div class="account-grid compact-account" data-account-picker>
         @forelse($accounts as $account)
-            <label class="account-choice {{ ($selectedAccount?->id===$account->id)?'selected':'' }}"><input type="radio" name="instagram_account_id" value="{{ $account->id }}" {{ ($selectedAccount?->id===$account->id)?'checked':'' }}><span class="account-avatar">{{ mb_strtoupper(mb_substr($account->username ?: 'IG',0,2)) }}</span><span class="account-copy"><strong>{{ '@'.($account->username ?: 'instagram') }}</strong><span>{{ $account->name ?: 'حساب فعال' }}</span></span><i>✓</i></label>
+            <label class="account-choice {{ ($selectedAccount?->id===$account->id)?'selected':'' }}"><input type="radio" name="instagram_account_id" value="{{ $account->id }}" {{ ($selectedAccount?->id===$account->id)?'checked':'' }}><span class="account-avatar">{{ mb_strtoupper(mb_substr($account->username ?: 'پنل',0,2)) }}</span><span class="account-copy"><strong>{{ '@'.($account->username ?: 'instagram') }}</strong><span>{{ $account->name ?: 'حساب فعال' }}</span></span><i>✓</i></label>
         @empty
             <div class="empty-state span-full"><strong>حساب فعال پیدا نشد</strong><p>اتصال حساب را بررسی کن و دوباره وارد این صفحه شو.</p></div>
         @endforelse
@@ -89,7 +89,7 @@
                 <div class="form-field"><label>متن دکمه</label><input name="follow_gate_button_label" id="followGateButtonLabel" maxlength="20" value="بررسی کردم" placeholder="بررسی کردم"></div>
                 <div class="form-field full"><label>پیام اگر هنوز دنبال نکرده بود</label><textarea name="follow_gate_not_following_message" id="followGateNotFollowingMessage" maxlength="640" placeholder="بعد از دنبال‌کردن صفحه، دوباره روی «بررسی کردم» بزنید."></textarea></div>
             </div>
-            <div class="follow-gate-preview"><div class="follow-gate-preview-top"><span class="preview-avatar">IG</span><div><strong>صفحه شما</strong><small>پیام خودکار</small></div></div><div class="follow-gate-preview-bubble" id="followGatePreviewMessage">لطفاً ابتدا صفحه را دنبال کنید و سپس روی «بررسی کردم» بزنید.</div><button type="button" class="follow-gate-preview-button" id="followGatePreviewButton">بررسی کردم</button><small class="follow-gate-preview-note">این مرحله قبل از پیام اصلی اجرا می‌شود.</small></div>
+            <div class="follow-gate-preview"><div class="follow-gate-preview-top"><span class="preview-avatar">پنل</span><div><strong>صفحه شما</strong><small>پیام خودکار</small></div></div><div class="follow-gate-preview-bubble" id="followGatePreviewMessage">لطفاً ابتدا صفحه را دنبال کنید و سپس روی «بررسی کردم» بزنید.</div><button type="button" class="follow-gate-preview-button" id="followGatePreviewButton">بررسی کردم</button><small class="follow-gate-preview-note">این مرحله قبل از پیام اصلی اجرا می‌شود.</small></div>
         </div>
     </div>
     <div class="step-actions"><button type="button" class="ghost-action" data-prev-step="2">→ مرحله قبل</button><span>مرحله ۳ از ۴</span><button type="button" class="primary-action" data-next-step="4">تنظیمات نهایی ←</button></div>
@@ -122,7 +122,7 @@
 
 <aside class="studio-side sticky-side">
     <section class="studio-preview-card"><div class="studio-preview-head"><div><span class="eyebrow">پیش‌نمایش</span><strong>پیام نهایی</strong></div><span class="live-pill"><i></i> زنده</span></div>
-        <div class="phone-frame modern-phone"><div class="phone-screen"><div class="phone-bar"><span></span><b>پیام‌ها</b><span>⋮</span></div><div class="chat-profile"><div class="avatar">IG</div><div><strong>صفحه شما</strong><small>فعال</small></div></div><div class="chat-area"><div class="bubble incoming" id="previewIncoming">قیمت این محصول چنده؟</div><div class="bubble outgoing" id="previewReply">سلام @{{username}} 👋
+        <div class="phone-frame modern-phone"><div class="phone-screen"><div class="phone-bar"><span></span><b>پیام‌ها</b><span>⋮</span></div><div class="chat-profile"><div class="avatar">پنل</div><div><strong>صفحه شما</strong><small>فعال</small></div></div><div class="chat-area"><div class="bubble incoming" id="previewIncoming">قیمت این محصول چنده؟</div><div class="bubble outgoing" id="previewReply">سلام @{{username}} 👋
 اطلاعات کامل براتون ارسال شد.</div></div><div class="chat-input">پیام… <span>⌁</span></div></div></div>
     </section>
     <section class="flow-summary-card"><div class="flow-card-title"><strong>مسیر اتوماسیون</strong><span>۳ گام</span></div><div class="visual-flow"><div class="visual-flow-node"><span>۱</span><strong id="flowTrigger">نظر روی پست</strong><small>محرک</small></div><div class="visual-flow-line"></div><div class="visual-flow-node"><span>۲</span><strong id="flowTarget">همه محتوا</strong><small>هدف</small></div><div class="visual-flow-line"></div><div class="visual-flow-node"><span>۳</span><strong id="flowAction">پاسخ خصوصی</strong><small>اقدام</small></div></div></section>

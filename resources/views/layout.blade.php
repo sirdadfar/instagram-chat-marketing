@@ -24,13 +24,13 @@
         <div class="sidebar-head">
             <a href="{{ route('dashboard') }}" class="brand">
                 <span class="brand-mark"><svg viewBox="0 0 24 24"><path d="M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Z"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1.1" class="fill"/></svg></span>
-                <span class="brand-copy"><strong>مدیریت اینستاگرام</strong><small>مرکز عملیات</small></span>
+                <span class="brand-copy"><strong>مدیریت اینستاگرام</strong><small>مدیریت یکپارچه</small></span>
             </a>
             <button class="icon-button sidebar-close" type="button" data-sidebar-close aria-label="بستن منو">×</button>
         </div>
 
         <div class="workspace-card">
-            <div class="workspace-avatar">IG</div>
+            <div class="workspace-avatar">پنل</div>
             <div class="workspace-copy"><strong>فضای کاری</strong><span>{{ $layoutAccountCount }} حساب فعال</span></div>
             <span class="online-dot" title="فعال"></span>
         </div>
@@ -56,7 +56,7 @@
         </nav>
 
         <div class="sidebar-footer">
-            <div class="system-status-card"><div class="system-status-head"><span class="status-pulse"></span><strong>وضعیت سیستم</strong><span class="status-label">عادی</span></div><p>رویدادهای جدید به‌صورت خودکار ثبت و پردازش می‌شوند.</p></div>
+            <div class="system-status-card"><div class="system-status-head"><span class="status-pulse"></span><strong>وضعیت سیستم</strong><span class="status-label">عادی</span></div></div>
             <form method="POST" action="{{ route('logout') }}">@csrf<button type="submit" class="logout-button"><svg viewBox="0 0 24 24"><path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="m15 16 4-4-4-4M9 12h10"/></svg>خروج</button></form>
         </div>
     </aside>
@@ -65,7 +65,7 @@
         <header class="topbar">
             <div class="topbar-start">
                 <button type="button" class="icon-button mobile-menu" data-sidebar-open aria-label="باز کردن منو"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-                <div><div class="breadcrumb"><span>مرکز مدیریت</span><b>/</b><strong>@yield('page_title', 'داشبورد')</strong></div><p class="topbar-hint">@yield('page_hint', 'مدیریت سریع و دقیق فعالیت‌های اینستاگرام')</p></div>
+                <div><div class="breadcrumb"><span>مرکز مدیریت</span><b>/</b><strong>@yield('page_title', 'داشبورد')</strong></div></div>
             </div>
             <div class="topbar-actions">
                 <button type="button" class="icon-button" data-theme-toggle title="تغییر پوسته"><svg viewBox="0 0 24 24"><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/><circle cx="12" cy="12" r="4"/></svg></button>
@@ -81,7 +81,7 @@
             @if($errors->any())<div class="flash flash-danger" data-flash><span class="flash-icon">!</span><div><strong>نیاز به بررسی</strong><p>{{ $errors->first() }}</p></div><button type="button" data-dismiss>×</button></div>@endif
             @yield('content')
         </div>
-        <footer class="page-footer"><span>مرکز مدیریت اینستاگرام</span><span>•</span><span>نسخه خصوصی</span></footer>
+        <footer class="page-footer"><span>مدیریت اینستاگرام</span></footer>
     </main>
 </div>
 <div class="modal-backdrop" data-confirm-modal aria-hidden="true"><div class="modal-card"><div class="modal-icon danger">!</div><h3 data-confirm-title>حذف مورد</h3><p data-confirm-text>این مورد حذف خواهد شد.</p><div class="modal-actions"><button type="button" class="secondary-action" data-confirm-cancel>انصراف</button><button type="button" class="danger-action" data-confirm-submit>حذف</button></div></div></div>

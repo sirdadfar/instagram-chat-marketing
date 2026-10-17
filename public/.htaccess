@@ -5,6 +5,11 @@
 
     RewriteEngine On
 
+    # اجبار HTTPS و جلوگیری از حلقه ریدایرکت پشت پراکسی معکوس
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L,NE]
+
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 

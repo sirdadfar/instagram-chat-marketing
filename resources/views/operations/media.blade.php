@@ -2,12 +2,12 @@
 @section('page_title','کتابخانه رسانه')
 @section('page_hint','رسانه‌های آماده برای استفاده در Automationها')
 @section('content')
-<div class="page-header-row"><div><div class="eyebrow">Media Library</div><h1>کتابخانه رسانه</h1><p>لینک رسانه‌های قابل ارسال را نگه‌داری و مدیریت کن.</p></div></div>
+<div class="page-header-row"><div><div class="eyebrow">کتابخانه رسانه</div><h1>کتابخانه رسانه</h1><p>لینک رسانه‌های قابل ارسال را نگه‌داری و مدیریت کن.</p></div></div>
 <section class="panel-card">
 <form method="POST" action="{{ route('media-library.store') }}" class="form-grid">@csrf
 <div class="form-field"><label>نام رسانه</label><input name="name" required placeholder="مثلاً ویدیوی معرفی"></div>
 <div class="form-field"><label>نوع</label><select name="type"><option value="image">تصویر</option><option value="video">ویدیو</option><option value="audio">صوت</option><option value="file">فایل</option></select></div>
-<div class="form-field full"><label>URL عمومی</label><input type="url" name="url" required placeholder="https://..."></div>
+<div class="form-field full"><label>نشانی اینترنتی عمومی</label><input type="url" name="url" required placeholder="https://..."></div>
 <div class="form-field full"><label>توضیح</label><input name="alt_text" placeholder="توضیح کوتاه"></div>
 <div class="full"><button class="primary-action">＋ افزودن رسانه</button></div>
 </form>
