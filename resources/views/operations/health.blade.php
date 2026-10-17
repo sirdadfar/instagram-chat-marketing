@@ -4,7 +4,6 @@
 @section('content')
 <div class="health-hero"><div class="health-shield">✓</div><div class="health-hero-copy"><span>SYSTEM OBSERVABILITY</span><h1>وضعیت و سلامت سیستم</h1><p>نمای کلی پردازش‌ها، اتوماسیون‌ها، رویدادهای ورودی و خطاهای اخیر.</p></div><div class="health-hero-side"><small>آخرین بررسی</small><strong>{{ now()->format('Y/m/d · H:i') }}</strong></div></div>
 <div class="health-section-title"><div><span>LIVE OVERVIEW</span><h2>شاخص‌های عملیاتی</h2></div><p>مقادیر فعلی ثبت‌شده در پایگاه داده</p></div>
-<div class="page-header-row"><div><div class="eyebrow">System Health</div><h1>سلامت سیستم</h1><p>شاخص‌های اصلی سرویس را قبل از انتشار یا رفع خطا بررسی کن.</p></div></div>
 <div class="insight-grid insight-grid-large health-kpi-grid">
 @foreach([['اتوماسیون‌ها',$automationCount],['اتوماسیون فعال',$activeAutomationCount],['مخاطبان',$contactCount],['Webhook',$webhookCount],['خطاهای ثبت‌شده',$failedCount],['در حال اجرا',$runningCount]] as $stat)
 <div class="insight-box premium-insight health-kpi"><span class="health-kpi-mark">{{ $loop->iteration }}</span><span>{{ $stat[0] }}</span><strong>{{ number_format($stat[1]) }}</strong><p>وضعیت ثبت‌شده در دیتابیس</p></div>
