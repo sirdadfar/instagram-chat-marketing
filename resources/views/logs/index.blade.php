@@ -40,7 +40,8 @@
 
 <style>
 /* خوانایی و نمایش حرفه‌ای داده‌های ساختاریافته در گزارش‌ها */
-.event-details { min-width: 0; }
+.event-details { grid-column: 1 / -1; width: 100%; min-width: 0; justify-self: stretch; }
+.event-details > p, .event-details .action-result { max-width: 100%; }
 .event-details > summary {
     display: inline-flex; align-items: center; gap: 8px;
     margin: 10px 0 4px; padding: 8px 12px; border-radius: 10px;
