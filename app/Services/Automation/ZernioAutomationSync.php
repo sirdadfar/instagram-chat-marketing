@@ -188,9 +188,12 @@ final class ZernioAutomationSync
 
         // Follow gate is a native Instagram audience rule:
         // only followers receive the main DM; unknown first-time commenters are asked to confirm after following.
+        $gateWithoutKeywords = (bool) AppSetting::getValue('follow_gate_without_keywords', false);
+        $hasConfiguredKeywords = count($keywords) > 0;
         $gateEnabled = in_array($trigger, ['comment', 'story_reply'], true)
             && (bool) AppSetting::getValue('follow_gate_enabled', true)
-            && trim((string) $dmMessage) !== '';
+            && trim((string) $dmMessage) !== ''
+            && ($hasConfiguredKeywords || $gateWithoutKeywords);
 
         if ($gateEnabled) {
             $existingAudience = is_array($automation->audience) ? $automation->audience : [];
