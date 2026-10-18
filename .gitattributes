@@ -1,0 +1,15 @@
+# Normalize line endings on commit; keep the working tree as-is.
+* text=auto
+
+*.blade.php diff=html
+*.css       diff=css
+*.js        diff=javascript
+*.md        diff=markdown
+
+# Keep repository meta files out of distribution archives.
+/.github        export-ignore
+/tests          export-ignore
+/phpunit.xml    export-ignore
+/.editorconfig  export-ignore
+/.gitattributes export-ignore
+/.gitignore     export-ignore

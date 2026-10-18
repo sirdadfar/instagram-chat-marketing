@@ -1203,7 +1203,11 @@ class PanelController extends Controller
 
         AppSetting::setValue('business_hours', $hours);
 
+        // Re-sync only the automations this user can see. Previously every tenant's
+        // automations were re-pushed using the session user's key, which leaked
+        // across accounts and could overwrite another page owner's configuration.
         Automation::with(['keywords','actions','account'])
+            ->whereIn('id', Tenancy::visibleAutomationIds())
             ->whereIn('trigger', ['comment','story_reply'])
             ->where('status', 'active')
             ->get()

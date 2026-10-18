@@ -45,7 +45,7 @@ class AdoptLegacyData extends Command
             return $admin;
         }
 
-        $email = strtolower(trim((string) ($this->option('email') ?: env('PANEL_ADMIN_EMAIL', ''))));
+        $email = strtolower(trim((string) ($this->option('email') ?: config('panel.admin_email', ''))));
         $email = $email !== '' ? $email : null;
 
         $admin = $email !== null ? User::query()->where('email', $email)->first() : null;
@@ -56,7 +56,7 @@ class AdoptLegacyData extends Command
             $username = $this->resolveAdminUsername($admin === null);
 
             $admin = User::create([
-                'name' => (string) env('PANEL_ADMIN_LABEL', 'مدیر سامانه'),
+                'name' => (string) config('panel.admin_name', 'مدیر سامانه'),
                 'username' => $username,
                 'email' => $email,
                 'password' => $passwordPlain,
@@ -83,9 +83,9 @@ class AdoptLegacyData extends Command
 
     private function resolveAdminUsername(bool $_create): string
     {
-        $base = mb_strtolower(trim((string) env('PANEL_ADMIN_USERNAME', '')));
+        $base = mb_strtolower(trim((string) config('panel.admin_username', '')));
         if ($base === '') {
-            $emailConfig = mb_strtolower(trim((string) env('PANEL_ADMIN_EMAIL', '')));
+            $emailConfig = mb_strtolower(trim((string) config('panel.admin_email', '')));
             $base = $emailConfig !== '' ? explode('@', $emailConfig)[0] : 'admin';
             $base = (string) preg_replace('/[^a-z0-9_.-]/i', '', $base);
             if ($base === '') {
@@ -105,7 +105,7 @@ class AdoptLegacyData extends Command
     private function resolveInitialPassword(): string
     {
         // 1) Explicit plain password in .env
-        $plain = env('PANEL_ADMIN_PASSWORD');
+        $plain = config('panel.admin_password');
         if (is_string($plain) && $plain !== '') {
             return $plain;
         }

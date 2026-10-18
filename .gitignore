@@ -1,15 +1,33 @@
 /vendor/
 /node_modules/
+
+# Environment
 .env
 .env.*
 !.env.example
+!.env.testing
+
+# Runtime storage (per-directory .gitignore files keep the folders)
 /storage/*.key
-/storage/framework/cache/*
-/storage/framework/sessions/*
-/storage/framework/views/*
-/storage/logs/*
-bootstrap/cache/*
+/storage/pail/
+
+# Bootstrap cache
+/bootstrap/cache/*
+!/bootstrap/cache/.gitkeep
+
+# Front-end build output (this project ships plain CSS/JS, kept for compatibility)
+/public/build
+/public/hot
+/public/storage
+
+# Local databases
+*.sqlite
+
+# Tooling
+/.phpunit.cache/
 .phpunit.result.cache
+
+# Editors & OS
 .DS_Store
 .idea/
 .vscode/

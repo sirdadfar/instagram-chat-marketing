@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/sirdadfar/instagram-chat-marketing/security/advisories/new
+    about: Please report security issues privately, not as a public issue.
+  - name: Documentation
+    url: https://github.com/sirdadfar/instagram-chat-marketing#readme
+    about: Installation and production guides live in the README and docs/.

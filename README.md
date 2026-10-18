@@ -8,6 +8,8 @@
 ![Queue](https://img.shields.io/badge/Queue-database-blueviolet)
 ![CI/CD](https://img.shields.io/badge/CI/CD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 ![Code Style](https://img.shields.io/badge/Style-Pint-F05340)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Tests](https://github.com/sirdadfar/instagram-chat-marketing/actions/workflows/tests.yml/badge.svg)
 
 **زبان:** [English](#english) · [فارسی](#فارسی)
 
@@ -231,7 +233,7 @@ app/
   Console/Commands/       artisan CLI (panel & zernio)
   Enums/                  AutomationTrigger · AutomationAction
   Http/Controllers/       Panel · Auth · Webhook · Analytics · Content · Comments · Operations
-  Http/Middleware/        PanelAuth
+  Http/Middleware/        PanelAuth · PanelAdmin
   Jobs/                   ProcessZernioWebhook
   Models/                 Automation* · Instagram* · Contact · Conversation · Message · ...
   Services/
@@ -263,17 +265,41 @@ routes/                   web.php · api.php (webhooks)
 ### 🔍 Testing & QA
 
 ```bash
-composer test        # PHPUnit (challenge: php artisan test)
-vendor/bin/pint      # Code style
+composer test        # PHPUnit (runs php artisan test)
+vendor/bin/pint --dirty   # Code style for files you changed
 ```
+
+The suite runs against an in-memory SQLite database and covers
+authentication, webhook signature verification/deduplication, multi-tenant
+isolation and the automation helpers.
 
 ---
 
 <div align="center">
 
-**License:** Proprietary — Private Project · Built with ❤️ for Instagram chat marketing
+**License:** MIT — free for personal and commercial use · See [`LICENSE`](LICENSE) · Built with ❤️ for Instagram chat marketing
 
 </div>
+
+---
+
+### 🤝 Contributing, Security & License
+
+This project is open source under the **MIT License** — you may use it, modify it
+and ship it commercially, provided the copyright notice and license text are
+kept. See [`LICENSE`](LICENSE).
+
+- **Contributing:** read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a PR.
+  We follow [Conventional Commits](https://www.conventionalcommits.org/) and PSR-12 (Pint).
+- **Code of Conduct:** [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+- **Security:** report vulnerabilities privately — see [`SECURITY.md`](SECURITY.md).
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md).
+
+> **Third-party terms.** Running this panel requires a [Zernio](https://zernio.com)
+> account/API key and an Instagram account connected through Meta's platform.
+> You are responsible for complying with Zernio's and Meta/Instagram's terms of
+> service and any applicable marketing/privacy regulations. The MIT license
+> covers **this repository's code only**.
 
 ---
 
@@ -495,7 +521,7 @@ app/
   Console/Commands/       دستورات artisan (پنل و زرنیو)
   Enums/                  AutomationTrigger · AutomationAction
   Http/Controllers/       Panel · Auth · Webhook · Analytics · Content · Comments · Operations
-  Http/Middleware/        PanelAuth
+  Http/Middleware/        PanelAuth · PanelAdmin
   Jobs/                   ProcessZernioWebhook
   Models/                 Automation* · Instagram* · Contact · Conversation · Message · ...
   Services/
@@ -535,6 +561,24 @@ vendor/bin/pint      # یکدست‌سازی استایل کد
 
 <div align="center">
 
-**لایسنس:** Proprietary — پروژه خصوصی · ساخته‌شده با ❤️ برای چت مارکتینگ اینستاگرام
+**لایسنس:** MIT — رایگان برای استفاده شخصی و تجاری · جزئیات در [`LICENSE`](LICENSE) · ساخته‌شده با ❤️ برای چت مارکتینگ اینستاگرام
 
 </div>
+
+---
+
+### 🤝 مشارکت، امنیت و لایسنس
+
+این پروژه تحت **مجوز MIT** اوپن‌سورس است — می‌توانی از آن استفاده کنی، تغییرش دهی و
+حتی به‌صورت تجاری منتشرش کنی، به شرط حفظ متن لایسنس و اعلان کپی‌رایت. جزئیات: [`LICENSE`](LICENSE).
+
+- **مشارکت:** قبل از ارسال PR، [`CONTRIBUTING.md`](CONTRIBUTING.md) را بخوان.
+  ما [Conventional Commits](https://www.conventionalcommits.org/) و PSR-12 (Pint) را رعایت می‌کنیم.
+- **آیین‌نامه رفتار:** [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+- **امنیت:** آسیب‌پذیری‌ها را به‌صورت خصوصی گزارش کن — [`SECURITY.md`](SECURITY.md).
+- **تغییرات:** [`CHANGELOG.md`](CHANGELOG.md).
+
+> **شرایط سرویس‌های ثالث.** اجرای این پنل به حساب/کلید API [زرنیو](https://zernio.com) و
+> یک حساب اینستاگرام متصل از طریق پلتفرم متا نیاز دارد. رعایت شرایط سرویس زرنیو و
+> متا/اینستاگرام و قوانین بازاریابی و حریم خصوصی بر عهده‌ی شماست. مجوز MIT فقط
+> شامل **کد همین مخزن** می‌شود.
