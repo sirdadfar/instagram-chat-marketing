@@ -90,7 +90,7 @@
 </div>
 <div class="modal-backdrop" data-confirm-modal aria-hidden="true"><div class="modal-card"><div class="modal-icon danger">!</div><h3 data-confirm-title>حذف مورد</h3><p data-confirm-text>این مورد حذف خواهد شد.</p><div class="modal-actions"><button type="button" class="secondary-action" data-confirm-cancel>انصراف</button><button type="button" class="danger-action" data-confirm-submit>حذف</button></div></div></div>
 <div class="toast-stack" data-toast-stack></div>
-@if(auth()->check() && !filled(auth()->user()?->zernio_api_key_enc))
+@if(auth()->check() && !auth()->user()->isAdmin() && !filled(auth()->user()?->zernio_api_key_enc))
 <div class="modal-backdrop modal-gate is-open" role="dialog" aria-modal="true" aria-labelledby="gate-title" aria-describedby="gate-desc">
   <div class="modal-card gate-card">
     <div class="gate-head">
