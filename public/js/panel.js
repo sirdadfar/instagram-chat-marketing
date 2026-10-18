@@ -340,35 +340,83 @@
         const sequenceInput=qs('[data-composer-sequence]',composer), sequenceList=qs('[data-composer-sequence-list]',composer);
         let sequence=[];
         try{sequence=JSON.parse(sequenceInput?.value||'[]');if(!Array.isArray(sequence))sequence=[];}catch{sequence=[];}
+        // Delegated queue interactions: one listener for every item (remove/reorder/edit) instead of rebinding per render.
+        sequenceList?.addEventListener('click',event=>{
+            const btn=event.target.closest('button[data-sequence-act]'); if(!btn||btn.disabled)return;
+            const index=Number(btn.dataset.sequenceIndex);
+            if(!Number.isInteger(index)||index<0||!sequence[index])return;
+            let focusIndex=index, focusAct=btn.dataset.sequenceAct;
+            switch(focusAct){
+                case 'remove': sequence.splice(index,1); break;
+                case 'up': [sequence[index-1],sequence[index]]=[sequence[index],sequence[index-1]]; focusIndex=index-1; break;
+                case 'down': [sequence[index+1],sequence[index]]=[sequence[index],sequence[index+1]]; focusIndex=index+1; break;
+                case 'edit': {
+                    const item=sequence[index];
+                    if(item.type==='media'){qs('[data-composer-url]',composer).value=item.attachmentUrl||'';qs('[data-composer-type]',composer).value=item.attachmentType||'';qs('[data-composer-name]',composer).value=item.attachmentName||'';if(statusNode)statusNode.hidden=true;render();}
+                    else{const field=messageField();if(field){field.value=item.message||'';field.dispatchEvent(new Event('input',{bubbles:true}));field.focus();}}
+                    sequence.splice(index,1); focusIndex=Math.max(0,index-1); break;
+                }
+                default:return;
+            }
+            renderSequence();
+            qs(`button[data-sequence-act="${focusAct}"][data-sequence-index="${focusIndex}"]`,sequenceList)?.focus();
+        });
         const messageField=()=>composer.closest('form')?.querySelector('[name="dm_message"],[name="private_reply"]');
+        const syncSequence=()=>{
+            if(sequenceInput)sequenceInput.value=JSON.stringify(sequence);
+            const count=qs('[data-composer-count]',composer);
+            if(count){count.textContent=sequence.length?`${toFa(sequence.length)} پیام در صف`:'صف خالی است';count.classList.toggle('is-live',sequence.length>0);}
+            const clearAll=qs('[data-composer-clear-sequence]',composer);
+            if(clearAll){clearAll.disabled=!sequence.length;clearAll.classList.remove('is-armed');delete clearAll.dataset.armed;clearAll.textContent='پاک کردن همه';}
+        };
+        const sequenceItemHtml=(item,i)=>{
+            const isMedia=item.type==='media';
+            const kind=isMedia?(item.attachmentType==='audio'?'🎙 ویس':item.attachmentType==='video'?'🎬 ویدیو':'🖼 تصویر'):'💬 متن';
+            const preview=isMedia?(item.attachmentName||'رسانه انتخاب‌شده'):(item.message||'متن خالی');
+            const thumb=isMedia&&item.attachmentType==='image'&&item.attachmentUrl?`<img class="sequence-thumb" src="${escapeHtml(item.attachmentUrl)}" alt="">`:'';
+            return '<li class="composer-sequence-item"><span class="sequence-number">'+toFa(String(i+1))+'</span>'
+                +'<span class="sequence-kind">'+kind+'</span>'
+                +'<span class="sequence-preview">'+thumb+'<strong title="'+escapeHtml(preview)+'">'+escapeHtml(preview).slice(0,90)+'</strong></span>'
+                +'<span class="sequence-tools">'
+                    +'<button type="button" class="sequence-tool" data-sequence-act="up" data-sequence-index="'+i+'" '+(i>0?'':'disabled')+' title="جابه‌جایی به بالا" aria-label="جابه‌جایی پیام '+toFa(String(i+1))+' به بالا">↑</button>'
+                    +'<button type="button" class="sequence-tool" data-sequence-act="down" data-sequence-index="'+i+'" '+(i<sequence.length-1?'':'disabled')+' title="جابه‌جایی به پایین" aria-label="جابه‌جایی پیام '+toFa(String(i+1))+' به پایین">↓</button>'
+                    +'<button type="button" class="sequence-tool" data-sequence-act="edit" data-sequence-index="'+i+'" title="بازگشت به ویرایشگر" aria-label="ویرایش پیام '+toFa(String(i+1))+'">✎</button>'
+                    +'<button type="button" class="sequence-tool danger" data-sequence-act="remove" data-sequence-index="'+i+'" title="حذف از صف" aria-label="حذف پیام '+toFa(String(i+1))+'">×</button>'
+                +'</span></li>';
+        };
         const renderSequence=()=>{
             if(!sequenceList)return;
-            sequenceList.innerHTML=sequence.length?sequence.map((item,i)=>{
-                const isMedia=item.type==='media';
-                const label=isMedia?(item.attachmentType==='audio'?'🎙 ویس':item.attachmentType==='video'?'🎬 ویدیو':'🖼 تصویر'):'💬 متن';
-                const preview=isMedia?(item.attachmentName||'رسانه انتخاب‌شده'):(item.message||'متن خالی');
-                return '<div class="composer-sequence-item"><span class="sequence-number">'+(i+1)+'</span><span class="sequence-kind">'+label+'</span><strong>'+escapeHtml(preview).slice(0,90)+'</strong><button type="button" class="icon-button" data-sequence-remove="'+i+'" title="حذف">×</button></div>';
-            }).join(''):'<div class="empty-mini">هنوز پیامی به صف اضافه نشده.</div>';
-            if(sequenceInput)sequenceInput.value=JSON.stringify(sequence);
-            qsa('[data-sequence-remove]',sequenceList).forEach(btn=>btn.addEventListener('click',()=>{sequence.splice(Number(btn.dataset.sequenceRemove),1);renderSequence();}));
+            sequenceList.innerHTML=sequence.length?sequence.map(sequenceItemHtml).join(''):'<li class="empty-mini">هنوز پیامی به صف اضافه نشده؛ اولین پیام را بساز.</li>';
+            syncSequence();
         };
+        const clearComposer=()=>{qs('[data-composer-url]',composer).value='';qs('[data-composer-type]',composer).value='';qs('[data-composer-name]',composer).value='';if(statusNode)statusNode.hidden=true;};
         const addCurrentToSequence=()=>{
             const field=messageField(), text=(field?.value||'').trim();
             const url=qs('[data-composer-url]',composer)?.value||'';
             const type=qs('[data-composer-type]',composer)?.value||'';
             const name=qs('[data-composer-name]',composer)?.value||'';
-            if(text && sequence.length<20) sequence.push({type:'text',message:text});
-            if(url && sequence.length<20) sequence.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
-            if(!text&&!url){field?.focus();setStatus('ابتدا متن یا رسانه را آماده کن.','error');return;} if(sequence.length>=20){setStatus('حداکثر ۲۰ پیام در هر صف قابل ثبت است.','error');return;}
-            if(field)field.value='';
-            qs('[data-composer-url]',composer).value='';qs('[data-composer-type]',composer).value='';qs('[data-composer-name]',composer).value='';
-            if(statusNode)statusNode.hidden=true;render();renderSequence();
+            const additions=[];
+            if(text)additions.push({type:'text',message:text});
+            if(url)additions.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
+            if(!additions.length){field?.focus();setStatus('ابتدا متن پیام یا رسانه را آماده کن.','error');return;}
+            if(sequence.length+additions.length>20){setStatus(`ظرفیت صف ۲۰ پیام است؛ فقط جا برای ${toFa(20-sequence.length)} پیام دیگر مانده.`,'error');return;}
+            const addedCount=additions.length;
+            sequence.push(...additions);
+            if(field){field.value='';field.dispatchEvent(new Event('input',{bubbles:true}));}
+            clearComposer();render();renderSequence();
+            setStatus(addedCount>1?`${toFa(addedCount)} پیام به صف اضافه شد.`:'۱ پیام به صف اضافه شد.','success');
         };
         qs('[data-composer-add-current]',composer)?.addEventListener('click',addCurrentToSequence);
         qs('[data-composer-add-text]',composer)?.addEventListener('click',()=>{
             const field=messageField();
             if((field?.value||'').trim()){addCurrentToSequence();return;}
             field?.focus();setStatus('متن را بنویس و سپس «افزودن آیتم فعلی» را بزن.','');
+        });
+        qs('[data-composer-clear-sequence]',composer)?.addEventListener('click',function(){
+            if(!sequence.length){setStatus('صف از قبل خالی است.','');return;}
+            if(this.dataset.armed){sequence=[];renderSequence();setStatus('صف پیام‌ها پاک شد.','success');return;}
+            this.dataset.armed='1';this.classList.add('is-armed');this.textContent='تأیید پاک‌سازی؟';
+            setTimeout(()=>{if(this.dataset.armed){delete this.dataset.armed;this.classList.remove('is-armed');this.textContent='پاک کردن همه';}},3000);
         });
         composer.closest('form')?.addEventListener('submit',()=>{
             const field=messageField(), text=(field?.value||'').trim();
@@ -383,7 +431,7 @@
                 if(sequence.length===1 && sequence[0]?.type==='media') Object.assign(sequence[0],{attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
                 else sequence.push({type:'media',attachmentUrl:url,attachmentType:type||'file',attachmentName:name});
             }
-            if(sequenceInput)sequenceInput.value=JSON.stringify(sequence);
+            syncSequence();
         });
         renderSequence();
         const setAvailability=()=>{const disabled=currentTrigger()==='comment'; composer.classList.toggle('is-disabled',disabled);qsa('[data-composer-tab="media"],[data-composer-tab="voice"],[data-composer-pick],[data-composer-record],[data-composer-stop]',composer).forEach(node=>node.disabled=disabled);const note=qs('[data-composer-disabled]',composer);if(note)note.hidden=!disabled;if(disabled){qs('[data-composer-tab="text"]',composer)?.click();qs('[data-composer-url]',composer).value='';qs('[data-composer-type]',composer).value='';qs('[data-composer-name]',composer).value='';render();}};
