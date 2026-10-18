@@ -549,6 +549,22 @@
     // Inbox filtering
     const inboxSearch=qs('#inboxSearch'); inboxSearch?.addEventListener('input',()=>{const q=inboxSearch.value.toLowerCase().trim();qsa('[data-inbox-row]').forEach(row=>row.style.display=!q||row.dataset.search.includes(q)?'':'none');});
 
+    // Inbox composer: serialize the interactive rows (quick replies / buttons) to JSON before submit
+    const inboxForm=qs('#inboxComposerForm');
+    if(inboxForm){
+        const splitRows=value=>value.split(/[،,\n]/).map(part=>part.trim()).filter(Boolean);
+        inboxForm.addEventListener('submit',()=>{
+            const quick=(qs('#inboxQuickReplies',inboxForm)?.value||'').split('|').map(part=>part.trim()).filter(Boolean).slice(0,13).map(title=>({content_type:'text',title}));
+            const buttons=splitRows(qs('#inboxButtons',inboxForm)?.value||'').slice(0,3).map(pair=>{
+                const [title,url]=pair.split('|').map(x=>x.trim());
+                return {type:url?'url':'postback',title,url:url||undefined,payload:title};
+            }).filter(button=>button.title);
+            const quickNode=qs('#inboxQuickJson',inboxForm), buttonsNode=qs('#inboxButtonsJson',inboxForm);
+            if(quickNode)quickNode.value=quick.length?JSON.stringify(quick):'';
+            if(buttonsNode)buttonsNode.value=buttons.length?JSON.stringify(buttons):'';
+        });
+    }
+
     // Account health
     qsa('[data-health-check]').forEach(button=>button.addEventListener('click',async()=>{button.disabled=true;button.textContent='در حال بررسی…';try{const res=await fetch(button.dataset.url,{headers:{Accept:'application/json'}});const data=await res.json();toast(data.ok?'وضعیت اتصال بررسی شد.':'بررسی اتصال انجام نشد.',data.ok?'success':'error');window.location.reload();}catch{toast('بررسی اتصال انجام نشد.','error');}finally{button.disabled=false;button.textContent='بررسی دوباره';}}));
 
