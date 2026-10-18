@@ -13,7 +13,7 @@
 @if(!$u->isActive())<form method="POST" action="{{ route('admin.users.activate',$u->id) }}">@csrf<button class="secondary-action" type="submit">فعال‌سازی</button></form>@endif
 @if($u->id !== auth()->id())<form method="POST" action="{{ route('admin.users.toggle-admin',$u->id) }}">@csrf<button class="secondary-action" type="submit">{{ $u->is_admin ? 'حذف دسترسی ادمین' : 'تبدیل به ادمین' }}</button></form>
 <form method="POST" action="{{ route('admin.users.reset-password',$u->id) }}">@csrf<button class="secondary-action" type="submit">ریست رمز</button></form>
-<form method="POST" action="{{ route('admin.users.destroy',$u->id) }}" onsubmit="return confirm('حذف این کاربر قطعی است. ادامه می‌دهید؟')">@csrf<button class="secondary-action" type="submit">حذف</button></form>@endif
+<form method="POST" action="{{ route('admin.users.destroy',$u->id) }}" onsubmit="return confirm('حذف این کاربر قطعی است. ادامه می‌دهید؟')">@csrf @method('DELETE')<button class="secondary-action" type="submit">حذف</button></form>@endif
 </div></div>@empty<div class="empty-mini">کاربری ثبت نشده است.</div>@endforelse</div></section>
 
 <section class="editor-card"><div class="section-head"><div><div class="eyebrow">پیج‌های اینستاگرام</div><h2>واگذاری مالکیت</h2><p>هر پیج مال به یک کاربر وصل است. پیج‌های بی‌مالک را به کاربر دلخواه واگذار کن.</p></div><span class="soft-tag">{{ $counts['pages'] }} پیج</span></div>
