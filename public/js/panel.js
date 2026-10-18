@@ -558,9 +558,16 @@
     const inboxForm=qs('#inboxComposerForm');
     if(inboxForm){
         const splitRows=value=>value.split(/[،,\n]/).map(part=>part.trim()).filter(Boolean);
-        inboxForm.addEventListener('submit',()=>{
-            const quick=(qs('#inboxQuickReplies',inboxForm)?.value||'').split('|').map(part=>part.trim()).filter(Boolean).slice(0,13).map(title=>{const text=title.slice(0,20);return {content_type:'text',title:text,payload:text};});
-            const buttons=splitRows(qs('#inboxButtons',inboxForm)?.value||'').slice(0,3).map(pair=>{
+        inboxForm.addEventListener('submit',event=>{
+            const quickRaw=qs('#inboxQuickReplies',inboxForm)?.value||'';
+            const buttonsRaw=qs('#inboxButtons',inboxForm)?.value||'';
+            if(quickRaw.trim() && buttonsRaw.trim()){
+                event.preventDefault();event.stopImmediatePropagation();
+                toast('پاسخ‌های سریع و دکمه‌ها هم‌زمان ارسال نمی‌شوند؛ یکی را خالی کن.','error');
+                return;
+            }
+            const quick=quickRaw.split('|').map(part=>part.trim()).filter(Boolean).slice(0,13).map(title=>{const text=title.slice(0,20);return {content_type:'text',title:text,payload:text};});
+            const buttons=splitRows(buttonsRaw).slice(0,3).map(pair=>{
                 const [title,url]=pair.split('|').map(x=>x.trim());
                 return {type:url?'url':'postback',title,url:url||undefined,payload:title};
             }).filter(button=>button.title);

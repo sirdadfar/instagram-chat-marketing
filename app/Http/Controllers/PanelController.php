@@ -15,7 +15,9 @@ use App\Services\Automation\Audit;
 use App\Services\Automation\AutomationEngine;
 use App\Services\Automation\ZernioAutomationSync;
 use App\Services\Zernio\ZernioClient;
+use App\Support\Buttons;
 use App\Support\Credentials;
+use App\Support\QuickReplies;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\File;
@@ -886,10 +888,45 @@ class PanelController extends Controller
             if ($buttons === []) {
                 $buttons = $this->parseButtonsText((string) ($data['buttons_text'] ?? ''));
             }
+
+            if ($quickReplies !== [] && $buttons !== []) {
+                $message = 'پاسخ‌های سریع و دکمه‌ها هم‌زمان ارسال نمی‌شوند؛ یکی را خالی کن.';
+
+                return $wantsJson
+                    ? response()->json(['ok' => false, 'message' => $message], 422)
+                    : back()->withErrors(['buttons_text' => $message]);
+            }
+
+            // Normalize both hidden-JSON and plain-text inputs. This also caps
+            // titles and validates button URLs before anything is sent.
+            $quickReplies = QuickReplies::normalize($quickReplies);
+            $buttons = Buttons::normalize($buttons);
+
             $template = $this->decodeJsonValue($data['template_json'] ?? null);
             $linkPreview = $request->boolean('link_preview');
             $isTagged = ! empty($data['message_tag']);
             $lastIndex = array_key_last($entries);
+
+            if ($buttons !== []) {
+                $lastText = trim((string) ($entries[$lastIndex]['message'] ?? ''));
+
+                if ($lastText === '') {
+                    $message = 'دکمه‌ها فقط همراه متن پیام ارسال می‌شوند؛ متن پیام را هم بنویس.';
+
+                    return $wantsJson
+                        ? response()->json(['ok' => false, 'message' => $message], 422)
+                        : back()->withErrors(['buttons_text' => $message]);
+                }
+
+                if (mb_strlen($lastText) > 640) {
+                    $message = 'وقتی دکمه ارسال می‌کنی، متن پیام باید حداکثر ۶۴۰ کاراکتر باشد.';
+
+                    return $wantsJson
+                        ? response()->json(['ok' => false, 'message' => $message], 422)
+                        : back()->withErrors(['buttons_text' => $message]);
+                }
+            }
+
             $sentCount = 0;
             $sentRows = [];
 
@@ -969,6 +1006,10 @@ class PanelController extends Controller
             }
 
             return back()->with('success', $flashMessage);
+        } catch (\InvalidArgumentException $e) {
+            return $wantsJson
+                ? response()->json(['ok' => false, 'message' => $e->getMessage()], 422)
+                : back()->withErrors(['buttons_text' => $e->getMessage()]);
         } catch (\Throwable $e) {
             report($e);
             $detail = $this->friendlySendError($e);
@@ -1550,7 +1591,7 @@ class PanelController extends Controller
                 continue;
             }
 
-            $buttons[] = $url !== '' && filter_var($url, FILTER_VALIDATE_URL)
+            $buttons[] = $url !== ''
                 ? ['type' => 'url', 'title' => $title, 'url' => $url]
                 : ['type' => 'postback', 'title' => $title, 'payload' => $title];
         }

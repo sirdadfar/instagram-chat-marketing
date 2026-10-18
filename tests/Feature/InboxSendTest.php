@@ -39,6 +39,66 @@ class InboxSendTest extends TestCase
         });
     }
 
+    public function test_buttons_are_sent_with_normalized_urls_and_postbacks(): void
+    {
+        [$user, $conversation] = $this->conversation();
+
+        $this->actingAs($user)
+            ->withSession(['panel_authenticated' => true])
+            ->postJson(route('inbox.send', $conversation), [
+                'message' => 'سلام',
+                'buttons_text' => 'سایت | example.com/page، پشتیبانی',
+            ])
+            ->assertOk()
+            ->assertJson(['ok' => true]);
+
+        Http::assertSent(function (Request $request): bool {
+            return ($request->data()['buttons'] ?? []) === [
+                ['type' => 'url', 'title' => 'سایت', 'url' => 'https://example.com/page'],
+                ['type' => 'postback', 'title' => 'پشتیبانی', 'payload' => 'پشتیبانی'],
+            ];
+        });
+    }
+
+    public function test_quick_replies_and_buttons_cannot_be_sent_together(): void
+    {
+        [$user, $conversation] = $this->conversation();
+
+        $this->actingAs($user)
+            ->withSession(['panel_authenticated' => true])
+            ->postJson(route('inbox.send', $conversation), [
+                'message' => 'سلام',
+                'quick_replies_text' => 'قیمت',
+                'buttons_text' => 'سایت | https://example.com',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath(
+                'message',
+                'پاسخ‌های سریع و دکمه‌ها هم‌زمان ارسال نمی‌شوند؛ یکی را خالی کن.'
+            );
+
+        Http::assertNothingSent();
+    }
+
+    public function test_an_invalid_button_url_is_rejected_before_sending(): void
+    {
+        [$user, $conversation] = $this->conversation();
+
+        $this->actingAs($user)
+            ->withSession(['panel_authenticated' => true])
+            ->postJson(route('inbox.send', $conversation), [
+                'message' => 'سلام',
+                'buttons_text' => 'سایت | http://exa mple.com',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath(
+                'message',
+                'لینک دکمه «سایت» معتبر نیست؛ آدرس کامل را با https:// وارد کن.'
+            );
+
+        Http::assertNothingSent();
+    }
+
     public function test_cached_javascript_quick_reply_json_without_payload_is_repaired(): void
     {
         [$user, $conversation] = $this->conversation();
