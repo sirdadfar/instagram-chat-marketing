@@ -63,57 +63,10 @@ class PanelController extends Controller
 
         // اگر حسابی هنوز در دیتابیس ثبت نشده، از Zernio به‌صورت خودکار همگام‌سازی کن.
         if ($accounts->where('status', 'active')->isEmpty() && Credentials::zernioApiKey()) {
-            try {
-                $response = $zernio->listAccounts(['platform' => 'instagram']);
-                $items = data_get($response, 'accounts');
-                if (!is_array($items)) {
-                    $items = data_get($response, 'data.accounts', data_get($response, 'data', []));
-                }
-
-                foreach ((array) $items as $item) {
-                    if (!is_array($item)) {
-                        continue;
-                    }
-
-                    $accountId = $item['id'] ?? $item['accountId'] ?? $item['_id'] ?? null;
-                    if (!$accountId) {
-                        continue;
-                    }
-
-                    $providerStatus = strtolower((string) ($item['status'] ?? $item['connectionStatus'] ?? $item['state'] ?? 'active'));
-                    $activeProviderStatuses = ['active', 'connected', 'authenticated', 'ready', 'online', 'enabled'];
-
-                    $existingAccount = InstagramAccount::where('zernio_account_id', (string) $accountId)->first();
-
-                    if ($existingAccount) {
-                        // Owned by someone else or inactive → do not claim it.
-                        if ($existingAccount->user_id === auth()->id()) {
-                            $existingAccount->update([
-                                'username' => $item['username'] ?? data_get($item, 'metadata.username'),
-                                'name' => $item['name'] ?? $item['displayName'] ?? data_get($item, 'metadata.name'),
-                                'status' => in_array($providerStatus, $activeProviderStatuses, true) ? 'active' : 'inactive',
-                                'metadata' => $item,
-                            ]);
-                        }
-                        continue;
-                    }
-
-                    InstagramAccount::create([
-                        'zernio_account_id' => (string) $accountId,
-                        'user_id' => auth()->id(),
-                        'username' => $item['username'] ?? data_get($item, 'metadata.username'),
-                        'name' => $item['name'] ?? $item['displayName'] ?? data_get($item, 'metadata.name'),
-                        'status' => in_array($providerStatus, $activeProviderStatuses, true) ? 'active' : 'inactive',
-                        'metadata' => $item,
-                    ]);
-                }
-
-                $accounts = Tenancy::accounts()->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
-                    ->orderByDesc('created_at')
-                    ->get();
-            } catch (\Throwable $e) {
-                report($e);
-            }
+            $this->syncZernioAccounts();
+            $accounts = Tenancy::accounts()->orderByRaw("CASE WHEN status = 'active' THEN 0 ELSE 1 END")
+                ->orderByDesc('created_at')
+                ->get();
         }
 
         $selectedAccount = $accounts->firstWhere('status', 'active');
@@ -1152,6 +1105,42 @@ class PanelController extends Controller
 
     public function saveSettings(Request $r, ZernioAutomationSync $nativeSync)
     {
+        // A) Personal service-key card: mandatory key page. Validating and
+        // storing the key must not touch (or wipe) the general settings below.
+        if ($r->boolean('zernio_key_card')) {
+            $hasKey = filled($r->user()->zernio_api_key_enc);
+            $r->validate(
+                ['zernio_api_key' => $hasKey ? ['nullable', 'string', 'max:512'] : ['required', 'string', 'max:512']],
+                ['zernio_api_key.required' => 'برای استفاده از پنل باید کلید شخصی سرویس خودت را وارد کنی.']
+            );
+
+            Credentials::rememberUserKey($r->user(), $r->input('zernio_api_key'));
+
+            if (! filled($r->user()->zernio_api_key_enc)) {
+                return back()->withErrors(['zernio_api_key' => 'ذخیره کلید انجام نشد؛ دوباره تلاش کن.']);
+            }
+
+            // Immediately discover the user's Instagram pages (and their ids).
+            $sync = $this->syncZernioAccounts();
+
+            $message = 'کلید شخصی تو ذخیره و رمزنگاری شد.';
+            if ($sync['error'] !== null) {
+                $message .= ' ' . $sync['error'];
+            } elseif ($sync['created'] > 0 || $sync['updated'] > 0) {
+                $message .= " پیج‌های اینستاگرام شناسایی شدند: {$sync['created']} اتصال جدید، {$sync['updated']} به‌روزرسانی.";
+            }
+
+            return back()->with('success', $message);
+        }
+
+        // B) Admin-only webhook secret card.
+        if ($r->user()->isAdmin() && $r->boolean('zernio_webhook_card')) {
+            Credentials::setGlobalWebhookSecret($r->input('zernio_webhook_secret'));
+
+            return back()->with('success', 'رمز وب-هوک ذخیره شد.');
+        }
+
+        // C) General settings card.
         AppSetting::setValue('automation_global_enabled', $r->boolean('global_enabled'));
         AppSetting::setValue('business_hours_enabled', $r->boolean('hours_enabled'));
         AppSetting::setValue('follow_gate_enabled', $r->boolean('follow_gate_enabled'));
@@ -1170,17 +1159,6 @@ class PanelController extends Controller
         }
 
         AppSetting::setValue('business_hours', $hours);
-
-        // Per-user service key; clearing checkbox revokes the personal key.
-        Credentials::rememberUserKey($r->user(), $r->input('zernio_api_key'));
-        if ($r->boolean('zernio_api_key_clear')) {
-            $r->user()->forceFill(['zernio_api_key_enc' => null])->save();
-        }
-
-        // Server-wide webhook secret: admins only.
-        if ($r->user()->isAdmin()) {
-            Credentials::setGlobalWebhookSecret($r->input('zernio_webhook_secret'));
-        }
 
         Automation::with(['keywords','actions','account'])
             ->whereIn('trigger', ['comment','story_reply'])
@@ -1202,13 +1180,102 @@ class PanelController extends Controller
         return response()->json(Notification::latest()->take(30)->get());
     }
 
+    /**
+     * Claims this user's Instagram pages from Zernio using the personal key.
+     * The Zernio account id is discovered here automatically — users never
+     * have to find or type an account id themselves.
+     *
+     * Returns summary counts for the flash message.
+     */
+    private function syncZernioAccounts(): array
+    {
+        $result = ['created' => 0, 'updated' => 0, 'error' => null];
+
+        if (! Credentials::zernioApiKey()) {
+            $result['error'] = 'کلید شخصی سرویس تنظیم نشده است.';
+
+            return $result;
+        }
+
+        try {
+            $response = app(ZernioClient::class)->listAccounts(['platform' => 'instagram']);
+            $items = data_get($response, 'accounts');
+            if (! is_array($items)) {
+                $items = data_get($response, 'data.accounts', data_get($response, 'data', []));
+            }
+
+            $activeProviderStatuses = ['active', 'connected', 'authenticated', 'ready', 'online', 'enabled'];
+
+            foreach ((array) $items as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+
+                $accountId = $item['id'] ?? $item['accountId'] ?? $item['_id'] ?? null;
+                if (! $accountId) {
+                    continue;
+                }
+
+                $providerStatus = strtolower((string) ($item['status'] ?? $item['connectionStatus'] ?? $item['state'] ?? 'active'));
+
+                $attributes = [
+                    'username' => $item['username'] ?? data_get($item, 'metadata.username'),
+                    'name' => $item['name'] ?? $item['displayName'] ?? data_get($item, 'metadata.name'),
+                    'status' => in_array($providerStatus, $activeProviderStatuses, true) ? 'active' : 'inactive',
+                    'metadata' => $item,
+                ];
+
+                $existing = InstagramAccount::where('zernio_account_id', (string) $accountId)->first();
+
+                if ($existing) {
+                    // Owned by someone else → never claim it.
+                    if ($existing->user_id === auth()->id()) {
+                        $existing->update($attributes);
+                        $result['updated']++;
+                    }
+                    continue;
+                }
+
+                InstagramAccount::create($attributes + [
+                    'zernio_account_id' => (string) $accountId,
+                    'user_id' => auth()->id(),
+                ]);
+                $result['created']++;
+            }
+        } catch (\Throwable $e) {
+            report($e);
+            $result['error'] = 'دریافت پیج‌ها از سرویس انجام نشد؛ بعداً دوباره همگام‌سازی کن.';
+        }
+
+        return $result;
+    }
+
+    /** POST /settings/accounts/sync → re-discover the user's Instagram pages. */
+    public function syncAccounts(Request $request)
+    {
+        if (! filled($request->user()->zernio_api_key_enc)) {
+            return back()->withErrors(['zernio_api_key' => 'ابتدا کلید شخصی سرویس خودت را در تنظیمات ذخیره کن.']);
+        }
+
+        $result = $this->syncZernioAccounts();
+
+        if ($result['error'] !== null) {
+            return back()->withErrors(['zernio_api_key' => $result['error']]);
+        }
+
+        $message = $result['created'] > 0 || $result['updated'] > 0
+            ? "همگام‌سازی انجام شد: {$result['created']} پیج جدید اتصال داده شد و {$result['updated']} پیج به‌روزرسانی شد."
+            : 'همگام‌سازی انجام شد: پیج جدیدی در سرویس پیدا نشد.';
+
+        return back()->with('success', $message);
+    }
+
     private static function credentialStatusLabels(string $status): string
     {
         return match ($status) {
             'personal' => 'کلید شخصی شما',
-            'custom' => 'از تنظیمات پنل',
-            'env' => 'از .env',
-            default => 'تنظیم نشده',
+            'none' => 'تنظیم نشده (الزامی)',
+            default => $status,
         };
     }
 

@@ -58,6 +58,7 @@ Route::middleware('panel.auth')->group(function(){
  Route::get('/settings/health',[PanelController::class,'accountHealth'])->name('settings.health');
  Route::post('/settings/ice-breakers',[PanelController::class,'iceBreakers'])->name('settings.ice-breakers');
  Route::post('/settings',[PanelController::class,'saveSettings'])->name('settings.save');
+Route::post('/settings/accounts/sync',[PanelController::class,'syncAccounts'])->name('settings.accounts.sync');
  Route::get('/notifications',[PanelController::class,'notifications'])->name('notifications');
  Route::get('/contacts',[OperationsController::class,'contacts'])->name('contacts');
  Route::get('/templates',[OperationsController::class,'templates'])->name('templates');

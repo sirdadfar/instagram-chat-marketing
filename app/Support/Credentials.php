@@ -12,10 +12,11 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * Resolves runtime credentials with this priority:
- *   1. The page/user owner's own key (set from the Settings screen, encrypted in DB).
- *   2. Value saved from the Settings screen by an admin (stored encrypted).
- *   3. Fallback from config (originally sourced from .env, cache-safe).
+ * Resolves the Zernio service key.
+ *
+ * Every user MUST set their own personal key (encrypted in DB). There is no
+ * global/.env fallback for service keys — each account is billed/bound to the
+ * key of the page owner.
  */
 final class Credentials
 {
@@ -35,11 +36,11 @@ final class Credentials
             return self::decrypt($user->zernio_api_key_enc);
         }
 
-        // 3) global: admin's Settings value, then .env
-        return self::storedOrConfig('zernio_api_key', 'zernio.api_key');
+        // No personal key → no service access. The user must add one in Settings.
+        return null;
     }
 
-    /** Stores (or clears) the service key on the given user. */
+    /** Stores (or replaces) the service key on the given user. */
     public static function rememberUserKey(User $user, mixed $plain): void
     {
         $value = trim((string) $plain);
@@ -115,15 +116,15 @@ final class Credentials
         return filled(config($configKey)) ? 'env' : 'none';
     }
 
-    /** Status of the effective Zernio key for the session user ('personal'|'custom'|'env'|'none'). */
-    public static function zernioKeyStatus(string $configKey = 'zernio.api_key'): string
+    /** Status of the effective Zernio key for the session user ('personal'|'none'). */
+    public static function zernioKeyStatus(): string
     {
         $user = auth()->user();
         if ($user instanceof User && filled($user->zernio_api_key_enc)) {
             return 'personal';
         }
 
-        return self::status('zernio_api_key', $configKey);
+        return 'none';
     }
 
     private static function stored(string $key): ?string
