@@ -90,6 +90,26 @@
 </div>
 <div class="modal-backdrop" data-confirm-modal aria-hidden="true"><div class="modal-card"><div class="modal-icon danger">!</div><h3 data-confirm-title>حذف مورد</h3><p data-confirm-text>این مورد حذف خواهد شد.</p><div class="modal-actions"><button type="button" class="secondary-action" data-confirm-cancel>انصراف</button><button type="button" class="danger-action" data-confirm-submit>حذف</button></div></div></div>
 <div class="toast-stack" data-toast-stack></div>
+@if(auth()->check() && !filled(auth()->user()?->zernio_api_key_enc))
+<div class="modal-backdrop modal-gate is-open" role="dialog" aria-modal="true" aria-label="اتصال حساب به سرویس">
+  <div class="modal-card">
+    <div class="modal-icon">✦</div>
+    <h3>اتصال حساب تو به سرویس</h3>
+    <p>برای فعال شدن پنل، دو مقدار که فقط مال خودت هستند لازم است. این مودال تا وقتی کلیدت را ذخیره نکنی باز می‌ماند.</p>
+    <ol class="key-steps">
+      <li><b>۱. کلید سرویس (API Key)</b> — وارد <a href="https://zernio.com" target="_blank" rel="noopener">پنل zernio.com</a> شو، با همان حسابی که پیج اینستاگرامت را به آن وصل کرده‌ای لاگین کن. در بخش <b>API Keys / کلیدهای دسترسی</b> یک کلید جدید بساز و مقدار کاملش را کپی کن.</li>
+      <li><b>۲. Secret وب‌هوک</b> — در همان پنل، بخش <b>Webhooks / تنظیمات اتصال</b> مقدار <b>Signing Secret</b> (یا «کلید امضا») را کپی کن؛ این مقدار امضای رویدادهای ورودی را تأیید می‌کند.</li>
+      <li><b>۳. ذخیره</b> — هر دو مقدار را در فیلدهای پایین بچسبان و «اتصال من» را بزن. پنل به‌خودی‌خود پیج‌های اینستاگرامت و شناسه اتصالشان را پیدا و اضافه می‌کند.</li>
+    </ol>
+    <form method="POST" action="{{ route('settings.save') }}">
+      @csrf<input type="hidden" name="zernio_key_card" value="1">
+      <div class="form-field"><label>کلید دسترسی سرویس (Zernio API Key) *</label><input type="password" name="zernio_api_key" required autocomplete="new-password" placeholder="مقدار کلید را همین‌جا بچسبان"></div>
+      <div class="form-field"><label>Secret وب‌هوک (Webhook Secret) *</label><input type="password" name="zernio_webhook_secret" required autocomplete="new-password" placeholder="مقدار Signing Secret را همین‌جا بچسبان"></div>
+      <div class="modal-actions"><button class="primary-action" type="submit">اتصال من ✦</button><a class="secondary-action" href="https://zernio.com" target="_blank" rel="noopener">باز کردن پنل سرویس ↗</a></div>
+    </form>
+  </div>
+</div>
+@endif
 <script src="{{ asset('js/panel.js') }}"></script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('{{ asset('sw.js') }}').catch(()=>{});}</script>
 @stack('scripts')

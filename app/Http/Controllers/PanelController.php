@@ -1146,13 +1146,18 @@ class PanelController extends Controller
         // A) Personal service-key card: mandatory key page. Validating and
         // storing the key must not touch (or wipe) the general settings below.
         if ($r->boolean('zernio_key_card')) {
-            $hasKey = filled($r->user()->zernio_api_key_enc);
-            $r->validate(
-                ['zernio_api_key' => $hasKey ? ['nullable', 'string', 'max:512'] : ['required', 'string', 'max:512']],
-                ['zernio_api_key.required' => 'برای استفاده از پنل باید کلید شخصی سرویس خودت را وارد کنی.']
-            );
+            $needsKey = ! filled($r->user()->zernio_api_key_enc);
+            $needsSecret = ! filled($r->user()->zernio_webhook_secret_enc);
+            $r->validate([
+                'zernio_api_key' => $needsKey ? ['required', 'string', 'max:512'] : ['nullable', 'string', 'max:512'],
+                'zernio_webhook_secret' => $needsSecret ? ['required', 'string', 'max:512'] : ['nullable', 'string', 'max:512'],
+            ], [
+                'zernio_api_key.required' => 'برای استفاده از پنل باید کلید شخصی سرویس خودت را وارد کنی.',
+                'zernio_webhook_secret.required' => 'برای دریافت رویدادها باید Secret وب‌هوک خودت را وارد کنی.',
+            ]);
 
             Credentials::rememberUserKey($r->user(), $r->input('zernio_api_key'));
+            Credentials::rememberUserWebhookSecret($r->user(), $r->input('zernio_webhook_secret'));
 
             if (! filled($r->user()->zernio_api_key_enc)) {
                 return back()->withErrors(['zernio_api_key' => 'ذخیره کلید انجام نشد؛ دوباره تلاش کن.']);
@@ -1161,7 +1166,7 @@ class PanelController extends Controller
             // Immediately discover the user's Instagram pages (and their ids).
             $sync = $this->syncZernioAccounts();
 
-            $message = 'کلید شخصی تو ذخیره و رمزنگاری شد.';
+            $message = 'کلید سرویس و Secret وب‌هوک تو ذخیره و رمزنگاری شدند.';
             if ($sync['error'] !== null) {
                 $message .= ' ' . $sync['error'];
             } elseif ($sync['created'] > 0 || $sync['updated'] > 0) {

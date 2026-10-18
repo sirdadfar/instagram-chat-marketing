@@ -70,6 +70,30 @@ final class Credentials
         return self::storedOrConfig('zernio_webhook_secret', 'zernio.webhook_secret');
     }
 
+    /** Stores (or replaces) the per-user inbound webhook signing secret. */
+    public static function rememberUserWebhookSecret(User $user, mixed $plain): void
+    {
+        $value = trim((string) $plain);
+
+        if ($value === '') {
+            return;
+        }
+
+        $user->forceFill([
+            'zernio_webhook_secret_enc' => self::ENC_PREFIX . Crypt::encryptString($value),
+        ])->save();
+    }
+
+    /** Decrypts the user's own webhook signing secret, or null when unset. */
+    public static function userWebhookSecret(User $user): ?string
+    {
+        if (is_string($user->zernio_webhook_secret_enc) && $user->zernio_webhook_secret_enc !== '') {
+            return self::decrypt($user->zernio_webhook_secret_enc);
+        }
+
+        return null;
+    }
+
     /**
      * Returns a bcrypt-usable value for Hash::check().
      * Plain text saved from Settings is hashed transparently.
