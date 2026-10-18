@@ -8,9 +8,10 @@ namespace App\Support;
  * Normalizes Instagram quick reply items.
  *
  * The messaging API rejects text quick replies that do not include a
- * `payload` ("Quick reply payload is required"), even though the payload is
- * optional in some client libraries. Every text quick reply is therefore
- * guaranteed to carry a payload derived from its title.
+ * `payload` ("Quick reply payload is required"), and it only accepts the
+ * `{ title, payload, imageUrl, workflowId }` shape. Every text quick reply is
+ * therefore guaranteed to carry a payload derived from its title, and any
+ * client-only fields (such as `content_type`) are dropped.
  */
 final class QuickReplies
 {
@@ -45,26 +46,29 @@ final class QuickReplies
                 continue;
             }
 
-            $contentType = trim((string) ($item['content_type'] ?? $item['contentType'] ?? 'text'));
-            if ($contentType === '') {
-                $contentType = 'text';
+            $title = mb_substr($title, 0, self::TITLE_LIMIT);
+
+            $quickReply = [
+                'title' => $title,
+                'payload' => $title,
+            ];
+
+            $payload = trim((string) ($item['payload'] ?? ''));
+            if ($payload !== '') {
+                $quickReply['payload'] = mb_substr($payload, 0, self::PAYLOAD_LIMIT);
             }
 
-            unset($item['contentType']);
-
-            $item['content_type'] = $contentType;
-            $item['title'] = mb_substr($title, 0, self::TITLE_LIMIT);
-
-            // Quick replies such as `user_email` and `user_phone_number` do not
-            // use a payload; plain text quick replies are required to have one.
-            if ($contentType === 'text') {
-                $payload = trim((string) ($item['payload'] ?? ''));
-                $item['payload'] = $payload !== ''
-                    ? mb_substr($payload, 0, self::PAYLOAD_LIMIT)
-                    : $item['title'];
+            $imageUrl = trim((string) ($item['imageUrl'] ?? $item['image_url'] ?? ''));
+            if ($imageUrl !== '') {
+                $quickReply['imageUrl'] = $imageUrl;
             }
 
-            $normalized[] = $item;
+            $workflowId = trim((string) ($item['workflowId'] ?? $item['workflow_id'] ?? ''));
+            if ($workflowId !== '') {
+                $quickReply['workflowId'] = $workflowId;
+            }
+
+            $normalized[] = $quickReply;
 
             if (count($normalized) >= $limit) {
                 break;

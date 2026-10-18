@@ -69,4 +69,18 @@ class QuickRepliesTest extends TestCase
     {
         $this->assertSame([], QuickReplies::normalize('not-an-array'));
     }
+
+    public function test_only_the_outgoing_api_fields_are_kept(): void
+    {
+        $result = QuickReplies::normalize([[
+            'content_type' => 'text',
+            'title' => 'Yes',
+            'payload' => 'yes_v1',
+            'image_url' => 'https://example.com/icon.png',
+        ]]);
+
+        $this->assertArrayNotHasKey('content_type', $result[0]);
+        $this->assertSame('https://example.com/icon.png', $result[0]['imageUrl']);
+        $this->assertSame(['title', 'payload', 'imageUrl'], array_keys($result[0]));
+    }
 }

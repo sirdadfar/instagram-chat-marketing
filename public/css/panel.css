@@ -1069,6 +1069,13 @@ input[type="time"]:focus{border-color:var(--accent);box-shadow:var(--ring);outli
 }
 .message-attachment audio{width:245px;max-width:100%}
 .message-attachment a{font-size:13px;color:var(--blue)}
+.bubble-interactive{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.bubble-chip{
+  font-size:12px;font-weight:600;padding:6px 12px;border-radius:16px;line-height:1;
+  color:var(--ink);background:color-mix(in srgb,var(--accent) 12%,var(--surface));
+  border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);
+}
+.bubble-chip.quick{border-style:dashed;color:var(--subtle);background:transparent;border-color:var(--line)}
 .bubble-time{font-size:11px;color:var(--subtle);margin-top:5px;text-align:left;direction:ltr}
 .bubble-tools{position:absolute;bottom:-12px;left:8px}
 .reaction-button{

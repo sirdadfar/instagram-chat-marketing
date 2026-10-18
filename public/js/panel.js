@@ -587,6 +587,12 @@
                 }
                 const field=qs('#inboxMessage',inboxForm);
                 if(field){field.value='';field.dispatchEvent(new Event('input',{bubbles:true}));}
+                const quickField=qs('#inboxQuickReplies',inboxForm), buttonsField=qs('#inboxButtons',inboxForm);
+                if(quickField)quickField.value='';
+                if(buttonsField)buttonsField.value='';
+                const quickNode=qs('#inboxQuickJson',inboxForm), buttonsNode=qs('#inboxButtonsJson',inboxForm);
+                if(quickNode)quickNode.value='';
+                if(buttonsNode)buttonsNode.value='';
                 qs('[data-message-composer]',inboxForm)?.dispatchEvent(new CustomEvent('composerreset'));
                 toast(data.message||'پیام ارسال شد.','success');
             }catch(err){

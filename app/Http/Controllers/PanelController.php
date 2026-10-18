@@ -793,7 +793,9 @@ class PanelController extends Controller
             'compose_attachment_name' => 'nullable|string|max:255',
             'compose_sequence_json' => 'nullable|string|max:200000',
             'quick_replies_json' => 'nullable|string|max:12000',
+            'quick_replies_text' => 'nullable|string|max:2000',
             'buttons_json' => 'nullable|string|max:12000',
+            'buttons_text' => 'nullable|string|max:2000',
             'template_json' => 'nullable|string|max:30000',
             'message_tag' => 'nullable|in:HUMAN_AGENT',
             'link_preview' => 'nullable|boolean',
@@ -810,12 +812,19 @@ class PanelController extends Controller
         // text/attachment into it — sending them separately would duplicate them.
         $plainMessage = trim((string) ($data['message'] ?? ''));
         $hasDirectAttachment = ! empty($data['compose_attachment_url']) || $request->hasFile('attachment');
+        $hasInteraction = trim((string) ($data['quick_replies_text'] ?? '')) !== ''
+            || trim((string) ($data['buttons_text'] ?? '')) !== ''
+            || trim((string) ($data['quick_replies_json'] ?? '')) !== ''
+            || trim((string) ($data['buttons_json'] ?? '')) !== '';
         $wantsJson = $request->wantsJson();
 
         if ($queue === [] && $plainMessage === '' && ! $hasDirectAttachment) {
+            $emptyMessage = $hasInteraction
+                ? 'اینستاگرام دکمه‌ها و پاسخ‌های سریع را فقط همراه متن پیام ارسال می‌کند؛ متن پیام را هم بنویس.'
+                : 'متن یا یک فایل رسانه‌ای برای ارسال انتخاب کنید.';
             return $wantsJson
-                ? response()->json(['ok' => false, 'message' => 'متن یا یک فایل رسانه‌ای برای ارسال انتخاب کنید.'], 422)
-                : back()->withErrors(['message' => 'متن یا یک فایل رسانه‌ای برای ارسال انتخاب کنید.']);
+                ? response()->json(['ok' => false, 'message' => $emptyMessage], 422)
+                : back()->withErrors(['message' => $emptyMessage]);
         }
 
         if (! $conversation->instagramAccount || $conversation->instagramAccount->status !== 'active') {
@@ -868,6 +877,15 @@ class PanelController extends Controller
 
             $quickReplies = $this->decodeJsonList($data['quick_replies_json'] ?? null);
             $buttons = $this->decodeJsonList($data['buttons_json'] ?? null);
+
+            // Fallback for browsers still running an older cached panel.js: parse
+            // the plain-text interaction fields even when the hidden JSON is empty.
+            if ($quickReplies === []) {
+                $quickReplies = $this->parseQuickRepliesText((string) ($data['quick_replies_text'] ?? ''));
+            }
+            if ($buttons === []) {
+                $buttons = $this->parseButtonsText((string) ($data['buttons_text'] ?? ''));
+            }
             $template = $this->decodeJsonValue($data['template_json'] ?? null);
             $linkPreview = $request->boolean('link_preview');
             $isTagged = ! empty($data['message_tag']);
@@ -929,6 +947,10 @@ class PanelController extends Controller
                         'url' => $entry['attachmentUrl'],
                         'filename' => $entry['attachmentName'] ?? null,
                     ]] : null,
+                    'metadata' => (! empty($body['quickReplies']) || ! empty($body['buttons'])) ? array_filter([
+                        'quickReplies' => $body['quickReplies'] ?? null,
+                        'buttons' => $body['buttons'] ?? null,
+                    ]) : null,
                     'sent_at' => now(),
                 ]);
                 $sentCount++;
@@ -1479,6 +1501,61 @@ class PanelController extends Controller
                 'config' => ['tag' => trim((string) $data['add_tag'])],
             ]);
         }
+    }
+
+    /**
+     * Parse the plain-text quick reply field ("price | order | stock") into
+     * the same structure the hidden JSON field produces.
+     */
+    private function parseQuickRepliesText(string $raw): array
+    {
+        if (trim($raw) === '') {
+            return [];
+        }
+
+        $items = preg_split('/\||\r?\n/u', $raw) ?: [];
+
+        return array_values(array_filter(array_map(
+            static function ($title): ?array {
+                $title = trim((string) $title);
+                if ($title === '') {
+                    return null;
+                }
+
+                return ['title' => mb_substr($title, 0, 20)];
+            },
+            array_slice($items, 0, 13)
+        )));
+    }
+
+    /**
+     * Parse the plain-text button field ("label | https://link, label2").
+     * Rows without a URL become postback buttons, matching panel.js.
+     */
+    private function parseButtonsText(string $raw): array
+    {
+        if (trim($raw) === '') {
+            return [];
+        }
+
+        $rows = preg_split('/[،,\r\n]+/u', $raw) ?: [];
+        $buttons = [];
+
+        foreach (array_slice($rows, 0, 3) as $row) {
+            [$title, $url] = array_pad(explode('|', (string) $row, 2), 2, '');
+            $title = mb_substr(trim($title), 0, 20);
+            $url = trim($url);
+
+            if ($title === '') {
+                continue;
+            }
+
+            $buttons[] = $url !== '' && filter_var($url, FILTER_VALIDATE_URL)
+                ? ['type' => 'url', 'title' => $title, 'url' => $url]
+                : ['type' => 'postback', 'title' => $title, 'payload' => $title];
+        }
+
+        return $buttons;
     }
 
     private function decodeJsonList(?string $raw): array
