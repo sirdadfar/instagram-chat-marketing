@@ -442,6 +442,7 @@
             if(currentTrigger()==='comment')return;if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){setStatus('این مرورگر ضبط صدا را پشتیبانی نمی‌کند.','error');return;}
             try{stream=await navigator.mediaDevices.getUserMedia({audio:true});const mime=['audio/webm;codecs=opus','audio/webm','audio/mp4'].find(t=>MediaRecorder.isTypeSupported?.(t));recorder=new MediaRecorder(stream,mime?{mimeType:mime}:undefined);chunks=[];startedAt=Date.now();recorder.ondataavailable=e=>e.data?.size&&chunks.push(e.data);recorder.onstop=async()=>{clearInterval(timerId);record.disabled=false;stop.disabled=true;orb?.classList.remove('composer-pulse');stream?.getTracks().forEach(t=>t.stop());stream=null;try{setStatus('در حال آماده‌سازی ویس…');const source=new Blob(chunks,{type:recorder.mimeType||'audio/webm'});const wav=await blobToWav(source);await upload(new File([wav],`voice-${Date.now()}.wav`,{type:'audio/wav'}));}catch{setStatus('تبدیل ویس انجام نشد؛ فایل صوتی سازگار را بارگذاری کن.','error');}};recorder.start(250);record.disabled=true;stop.disabled=false;orb?.classList.add('composer-pulse');timerId=setInterval(()=>{const sec=Math.floor((Date.now()-startedAt)/1000);if(timer)timer.textContent=`${toFa(String(Math.floor(sec/60)).padStart(2,'0'))}:${toFa(String(sec%60).padStart(2,'0'))}`;if(sec>=60&&recorder?.state==='recording')recorder.stop();},250);}catch{setStatus('دسترسی به میکروفن داده نشد.','error');}
         });
+        composer.addEventListener('composerreset',()=>{sequence=[];clearComposer();render();renderSequence();});
         stop?.addEventListener('click',()=>{if(recorder?.state==='recording')recorder.stop();}); setAvailability(); render(); composer.addEventListener('automationtriggerchange',setAvailability);
     });
     qsa('input[name="trigger"]').forEach(input=>input.addEventListener('change',()=>qsa('[data-message-composer]').forEach(c=>{c.dataset.automationTrigger=input.checked?input.value:c.dataset.automationTrigger; c.dispatchEvent(new CustomEvent('automationtriggerchange')); } )));
@@ -562,6 +563,34 @@
             const quickNode=qs('#inboxQuickJson',inboxForm), buttonsNode=qs('#inboxButtonsJson',inboxForm);
             if(quickNode)quickNode.value=quick.length?JSON.stringify(quick):'';
             if(buttonsNode)buttonsNode.value=buttons.length?JSON.stringify(buttons):'';
+        });
+        // AJAX submit: send via fetch, append new bubbles, no page reload
+        let sending=false;
+        inboxForm.addEventListener('submit',async event=>{
+            event.preventDefault();
+            if(sending)return; sending=true;
+            const sendButton=qs('.send-button',inboxForm), originalHtml=sendButton?.innerHTML||'';
+            if(sendButton){sendButton.disabled=true;sendButton.innerHTML='در حال ارسال…';}
+            try{
+                const res=await fetch(inboxForm.action,{method:'POST',headers:{'X-CSRF-TOKEN':csrf,Accept:'application/json'},body:new FormData(inboxForm)});
+                const data=await res.json().catch(()=>({}));
+                if(!res.ok||!data.ok)throw new Error(data.message||data.errors?.message?.[0]||'ارسال پیام انجام نشد.');
+                const stream=qs('#messageStream');
+                if(stream&&data.html){
+                    qs('.empty-chat',stream)?.remove();
+                    stream.insertAdjacentHTML('beforeend',data.html);
+                    stream.scrollTo({top:stream.scrollHeight,behavior:'smooth'});
+                }
+                const field=qs('#inboxMessage',inboxForm);
+                if(field){field.value='';field.dispatchEvent(new Event('input',{bubbles:true}));}
+                qs('[data-message-composer]',inboxForm)?.dispatchEvent(new CustomEvent('composerreset'));
+                toast(data.message||'پیام ارسال شد.','success');
+            }catch(err){
+                toast(err.message||'ارسال پیام انجام نشد.','error');
+            }finally{
+                sending=false;
+                if(sendButton){sendButton.disabled=false;sendButton.innerHTML=originalHtml;}
+            }
         });
     }
 

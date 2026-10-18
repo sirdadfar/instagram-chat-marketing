@@ -12,16 +12,7 @@
 <div class="chat-header-pro"><div class="chat-person"><div class="avatar-photo avatar-photo-xl">{{ mb_strtoupper(mb_substr($contact?->username ?: 'پنل',0,2)) }}</div><div><strong>{{ '@'.($contact?->username ?: 'مخاطب') }}</strong><span>{{ $contact?->full_name ?: 'مخاطب اینستاگرام' }}</span></div></div><div class="chat-header-meta"><span>{{ $account?->username ? '@'.$account->username : 'حساب' }}</span><span>{{ $conversation->last_message_at?->diffForHumans() }}</span></div></div>
 <div class="message-stream" id="messageStream">
 @forelse($conversation->messages as $message)
-@php($isOut=$message->direction==='outbound')
-<div class="message-line {{ $isOut?'outbound':'inbound' }}" data-message-line>
-<div class="message-bubble {{ $isOut?'outgoing':'incoming' }}" data-message-id="{{ $message->external_message_id }}">
-@if($message->text)<div class="bubble-text">{!! nl2br(e($message->text)) !!}</div>@endif
-@if($message->attachments)
-<div class="message-attachments">@foreach($message->attachments as $att)<div class="message-attachment">@if(($att['type']??'')==='image')<img src="{{ $att['url']??'' }}" alt="رسانه">@elseif(($att['type']??'')==='video')<video controls preload="metadata" src="{{ $att['url']??'' }}"></video>@elseif(($att['type']??'')==='audio')<audio controls src="{{ $att['url']??'' }}"></audio>@else<a target="_blank" rel="noreferrer" href="{{ $att['url']??'#' }}">فایل پیوست ↗</a>@endif</div>@endforeach</div>
-@endif
-@if($isOut && $message->external_message_id)<div class="bubble-tools"><button type="button" class="reaction-button" data-react-message data-url="{{ route('inbox.message.react',[$conversation,$message->external_message_id]) }}" data-emoji="❤️">♡</button></div>@endif
-<div class="bubble-time">{{ $message->sent_at?->format('H:i') }}</div>
-</div></div>
+@include('inbox.partials.message',['conversation'=>$conversation,'message'=>$message])
 @empty<div class="empty-chat"><span>✦</span><strong>هنوز پیامی در این گفتگو نیست</strong></div>@endforelse
 </div>
 <div class="composer-dock"><form method="POST" action="{{ route('inbox.send',$conversation) }}" enctype="multipart/form-data" id="inboxComposerForm">@csrf

@@ -857,12 +857,18 @@ class PanelController extends Controller
         // text/attachment into it — sending them separately would duplicate them.
         $plainMessage = trim((string) ($data['message'] ?? ''));
         $hasDirectAttachment = ! empty($data['compose_attachment_url']) || $request->hasFile('attachment');
+        $wantsJson = $request->wantsJson();
+
         if ($queue === [] && $plainMessage === '' && ! $hasDirectAttachment) {
-            return back()->withErrors(['message' => 'متن یا یک فایل رسانه‌ای برای ارسال انتخاب کنید.']);
+            return $wantsJson
+                ? response()->json(['ok' => false, 'message' => 'متن یا یک فایل رسانه‌ای برای ارسال انتخاب کنید.'], 422)
+                : back()->withErrors(['message' => 'متن یا یک فایل رسانه‌ای برای ارسال انتخاب کنید.']);
         }
 
         if (! $conversation->instagramAccount || $conversation->instagramAccount->status !== 'active') {
-            return back()->withErrors(['message' => 'حساب اینستاگرام این گفتگو فعال نیست.']);
+            return $wantsJson
+                ? response()->json(['ok' => false, 'message' => 'حساب اینستاگرام این گفتگو فعال نیست.'], 422)
+                : back()->withErrors(['message' => 'حساب اینستاگرام این گفتگو فعال نیست.']);
         }
 
         $attachmentName = $data['compose_attachment_name']
@@ -914,6 +920,7 @@ class PanelController extends Controller
             $isTagged = ! empty($data['message_tag']);
             $lastIndex = array_key_last($entries);
             $sentCount = 0;
+            $sentRows = [];
 
             foreach ($entries as $index => $entry) {
                 $body = [];
@@ -957,7 +964,7 @@ class PanelController extends Controller
                 $externalId = data_get($messageData, 'messageId');
                 $isMedia = $entry['type'] === 'media';
 
-                $conversation->messages()->create([
+                $sentRows[] = $conversation->messages()->create([
                     'external_message_id' => is_string($externalId) ? $externalId : null,
                     'direction' => 'outbound',
                     'type' => $isMedia ? $entry['attachmentType'] : 'text',
@@ -976,10 +983,22 @@ class PanelController extends Controller
 
             $conversation->update(['last_message_at' => now(), 'needs_human' => false]);
 
-            return back()->with('success', $sentCount > 1 ? 'پیام‌ها با موفقیت ارسال شدند.' : 'پیام با موفقیت ارسال شد.');
+            $flashMessage = $sentCount > 1 ? 'پیام‌ها با موفقیت ارسال شدند.' : 'پیام با موفقیت ارسال شد.';
+
+            if ($wantsJson) {
+                $html = '';
+                foreach ($sentRows as $row) {
+                    $html .= view('inbox.partials.message', ['conversation' => $conversation, 'message' => $row])->render();
+                }
+                return response()->json(['ok' => true, 'message' => $flashMessage, 'html' => $html]);
+            }
+
+            return back()->with('success', $flashMessage);
         } catch (\Throwable $e) {
             report($e);
-            return back()->withErrors(['message' => 'ارسال پیام انجام نشد. وضعیت اتصال و اطلاعات پیام را بررسی کنید.']);
+            return $wantsJson
+                ? response()->json(['ok' => false, 'message' => 'ارسال پیام انجام نشد. وضعیت اتصال و اطلاعات پیام را بررسی کنید.'], 500)
+                : back()->withErrors(['message' => 'ارسال پیام انجام نشد. وضعیت اتصال و اطلاعات پیام را بررسی کنید.']);
         }
     }
 
