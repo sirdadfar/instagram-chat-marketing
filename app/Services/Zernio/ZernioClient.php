@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Zernio;
 
 use App\Support\Credentials;
+use App\Support\QuickReplies;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -70,12 +71,12 @@ class ZernioClient
 
     public function createCommentAutomation(array $data): array
     {
-        return $this->post('/comment-automations', $data);
+        return $this->post('/comment-automations', QuickReplies::attach($data));
     }
 
     public function updateCommentAutomation(string $id, array $data): array
     {
-        return $this->patch('/comment-automations/' . rawurlencode($id), $data);
+        return $this->patch('/comment-automations/' . rawurlencode($id), QuickReplies::attach($data));
     }
 
     public function listAccounts(array $query = []): array
@@ -136,7 +137,7 @@ class ZernioClient
     {
         return $this->post(
             '/inbox/comments/' . rawurlencode($postId) . '/' . rawurlencode($commentId) . '/private-reply',
-            array_merge(['accountId' => $accountId], $body),
+            QuickReplies::attach(array_merge(['accountId' => $accountId], $body)),
         );
     }
 
@@ -144,7 +145,7 @@ class ZernioClient
     {
         return $this->post(
             '/inbox/conversations/' . rawurlencode($conversationId) . '/messages',
-            array_merge(['accountId' => $accountId], $body),
+            QuickReplies::attach(array_merge(['accountId' => $accountId], $body)),
             ['Idempotency-Key' => $idempotencyKey],
         );
     }

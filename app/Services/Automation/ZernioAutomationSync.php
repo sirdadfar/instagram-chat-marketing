@@ -171,8 +171,6 @@ final class ZernioAutomationSync
             }
             $body['buttons'] = $buttons;
             $body['template'] = null;
-        } elseif ($automation->zernio_automation_id) {
-            $body['buttons'] = [];
         } elseif ($quickReplies) {
             $body['quickReplies'] = array_values(array_slice($quickReplies, 0, 13));
             if ($automation->zernio_automation_id) {

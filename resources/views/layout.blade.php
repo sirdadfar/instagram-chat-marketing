@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ asset('css/panel.css') }}">
+    <link rel="stylesheet" href="{{ asset('css/panel.css').'?v='.(is_file(public_path('css/panel.css'))?filemtime(public_path('css/panel.css')):1) }}">
     <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
     <script>try{if(localStorage.getItem('instagram-panel-theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
 </head>
@@ -145,7 +145,7 @@
   </div>
 </div>
 @endif
-<script src="{{ asset('js/panel.js') }}"></script>
+<script src="{{ asset('js/panel.js').'?v='.(is_file(public_path('js/panel.js'))?filemtime(public_path('js/panel.js')):1) }}"></script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('{{ asset('sw.js') }}').catch(()=>{});}</script>
 @stack('scripts')
 </body>

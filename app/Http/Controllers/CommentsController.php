@@ -77,8 +77,16 @@ class CommentsController extends Controller
         $body = ['message' => $data['message']];
         $quick = json_decode($data['quick_replies_json'] ?? '', true);
         $buttons = json_decode($data['buttons_json'] ?? '', true);
-        if (is_array($quick) && $quick) $body['quickReplies'] = array_values(array_slice($quick, 0, 13));
-        if (is_array($buttons) && $buttons) $body['buttons'] = array_values(array_slice($buttons, 0, 3));
+        $quick = is_array($quick) ? array_values($quick) : [];
+        $buttons = is_array($buttons) ? array_values($buttons) : [];
+
+        // Instagram rejects a message that carries both buttons and quick
+        // replies; buttons take priority because they carry an explicit action.
+        if ($buttons !== []) {
+            $body['buttons'] = array_slice($buttons, 0, 3);
+        } elseif ($quick !== []) {
+            $body['quickReplies'] = array_slice($quick, 0, 13);
+        }
         try {
             $result = $client->privateReply($data['post_id'], $data['comment_id'], $account->zernio_account_id, $body);
             return response()->json(['ok'=>true,'data'=>$result]);
