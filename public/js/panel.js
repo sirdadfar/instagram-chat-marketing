@@ -361,7 +361,7 @@
             renderSequence();
             qs(`button[data-sequence-act="${focusAct}"][data-sequence-index="${focusIndex}"]`,sequenceList)?.focus();
         });
-        const messageField=()=>composer.closest('form')?.querySelector('[name="dm_message"],[name="private_reply"]');
+        const messageField=()=>composer.closest('form')?.querySelector('[name="dm_message"],[name="private_reply"],[name="message"]');
         const syncSequence=()=>{
             if(sequenceInput)sequenceInput.value=JSON.stringify(sequence);
             const count=qs('[data-composer-count]',composer);

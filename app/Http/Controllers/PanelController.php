@@ -838,6 +838,7 @@ class PanelController extends Controller
             'compose_attachment_url' => 'nullable|url|max:2048',
             'compose_attachment_type' => 'nullable|in:image,video,audio,file',
             'compose_attachment_name' => 'nullable|string|max:255',
+            'compose_sequence_json' => 'nullable|string|max:200000',
             'quick_replies_json' => 'nullable|string|max:12000',
             'buttons_json' => 'nullable|string|max:12000',
             'template_json' => 'nullable|string|max:30000',
@@ -850,7 +851,13 @@ class PanelController extends Controller
             ],
         ]);
 
-        if (trim((string) ($data['message'] ?? '')) === '' && ! $request->hasFile('attachment') && empty($data['compose_attachment_url'])) {
+        $queue = $this->decodeComposeQueue($data['compose_sequence_json'] ?? null);
+
+        // When the composer submits a queue it has already merged the current
+        // text/attachment into it — sending them separately would duplicate them.
+        $plainMessage = trim((string) ($data['message'] ?? ''));
+        $hasDirectAttachment = ! empty($data['compose_attachment_url']) || $request->hasFile('attachment');
+        if ($queue === [] && $plainMessage === '' && ! $hasDirectAttachment) {
             return back()->withErrors(['message' => 'متن یا یک فایل رسانه‌ای برای ارسال انتخاب کنید.']);
         }
 
@@ -858,84 +865,118 @@ class PanelController extends Controller
             return back()->withErrors(['message' => 'حساب اینستاگرام این گفتگو فعال نیست.']);
         }
 
-        $attachmentUrl = null;
-        $attachmentType = null;
+        $attachmentName = $data['compose_attachment_name']
+            ?? ($request->hasFile('attachment') ? $data['attachment']->getClientOriginalName() : null);
 
         try {
-            if (! empty($data['compose_attachment_url'])) {
-                $attachmentUrl = $data['compose_attachment_url'];
-                $attachmentType = $data['compose_attachment_type'] ?: 'file';
-            } elseif ($request->hasFile('attachment')) {
-                $uploaded = $zernio->uploadMediaDirect($data['attachment']);
-                $attachmentUrl = data_get($uploaded, 'url', data_get($uploaded, 'data.url'));
-                $attachmentType = match (strtolower((string) $data['attachment']->getMimeType())) {
-                    'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif' => 'image',
-                    'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm' => 'video',
-                    'audio/mp4', 'audio/aac', 'audio/wav', 'audio/x-m4a' => 'audio',
-                    default => 'file',
-                };
+            $entries = $queue;
+            $attachmentUrl = null;
+            $attachmentType = null;
 
-                if (! $attachmentUrl) {
-                    throw new \RuntimeException('آدرس عمومی رسانه دریافت نشد.');
+            // Legacy single-message path: resolve text + attachment exactly as before
+            // and shape them into one entry (attachment with caption, or plain text).
+            if ($entries === []) {
+                if ($hasDirectAttachment) {
+                    if (! empty($data['compose_attachment_url'])) {
+                        $attachmentUrl = $data['compose_attachment_url'];
+                        $attachmentType = $data['compose_attachment_type'] ?: 'file';
+                    } elseif ($request->hasFile('attachment')) {
+                        $uploaded = $zernio->uploadMediaDirect($data['attachment']);
+                        $attachmentUrl = data_get($uploaded, 'url', data_get($uploaded, 'data.url'));
+                        $attachmentType = match (strtolower((string) $data['attachment']->getMimeType())) {
+                            'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif' => 'image',
+                            'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm' => 'video',
+                            'audio/mp4', 'audio/aac', 'audio/wav', 'audio/x-m4a' => 'audio',
+                            default => 'file',
+                        };
+
+                        if (! $attachmentUrl) {
+                            throw new \RuntimeException('آدرس عمومی رسانه دریافت نشد.');
+                        }
+                    }
+
+                    $entries[] = [
+                        'type' => 'media',
+                        'message' => $plainMessage,
+                        'attachmentUrl' => $attachmentUrl,
+                        'attachmentType' => $attachmentType,
+                        'attachmentName' => $attachmentName,
+                    ];
+                } elseif ($plainMessage !== '') {
+                    $entries[] = ['type' => 'text', 'message' => $plainMessage];
                 }
-            }
-
-            $attachmentName = $data['compose_attachment_name'] ?? ($request->hasFile('attachment') ? $data['attachment']->getClientOriginalName() : null);
-
-            $body = [];
-            if (trim((string) ($data['message'] ?? '')) !== '') {
-                $body['message'] = trim((string) $data['message']);
-            }
-            if ($attachmentUrl) {
-                $body['attachmentUrl'] = $attachmentUrl;
-                $body['attachmentType'] = $attachmentType;
             }
 
             $quickReplies = $this->decodeJsonList($data['quick_replies_json'] ?? null);
             $buttons = $this->decodeJsonList($data['buttons_json'] ?? null);
             $template = $this->decodeJsonValue($data['template_json'] ?? null);
-            if ($quickReplies) {
-                $body['quickReplies'] = array_values(array_slice($quickReplies, 0, 13));
-            } elseif ($buttons) {
-                $body['buttons'] = array_values(array_slice($buttons, 0, 3));
-            }
-            if (is_array($template) && $template !== []) {
-                $body['template'] = $template;
-            }
-            if (!empty($data['message_tag'])) {
-                $body['messageTag'] = $data['message_tag'];
-                $body['messagingType'] = 'MESSAGE_TAG';
-            }
-            $body['linkPreview'] = $request->boolean('link_preview');
+            $linkPreview = $request->boolean('link_preview');
+            $isTagged = ! empty($data['message_tag']);
+            $lastIndex = array_key_last($entries);
+            $sentCount = 0;
 
-            $result = $zernio->sendMessage(
-                $conversation->zernio_conversation_id,
-                $conversation->instagramAccount->zernio_account_id,
-                $body,
-                (string) \Illuminate\Support\Str::uuid(),
-            );
+            foreach ($entries as $index => $entry) {
+                $body = [];
+                $text = trim((string) ($entry['message'] ?? ''));
 
-            $messageData = data_get($result, 'data', $result);
-            $externalId = data_get($messageData, 'messageId');
+                if ($entry['type'] === 'media') {
+                    $body['attachmentUrl'] = $entry['attachmentUrl'];
+                    $body['attachmentType'] = $entry['attachmentType'];
+                }
+                if ($text !== '') {
+                    $body['message'] = $text;
+                }
 
-            $conversation->messages()->create([
-                'external_message_id' => is_string($externalId) ? $externalId : null,
-                'direction' => 'outbound',
-                'type' => $attachmentType ?: 'text',
-                'text' => $data['message'] ?? null,
-                'status' => 'sent',
-                'source' => 'panel',
-                'attachments' => $attachmentUrl ? [[
-                    'type' => $attachmentType,
-                    'url' => $attachmentUrl,
-                    'filename' => $attachmentName,
-                ]] : null,
-                'sent_at' => now(),
-            ]);
+                $body['linkPreview'] = $linkPreview;
+
+                // Interactive extras (quick replies, buttons, template, tag) ride
+                // on the final message of the sequence only.
+                if ($index === $lastIndex) {
+                    if ($quickReplies) {
+                        $body['quickReplies'] = array_values(array_slice($quickReplies, 0, 13));
+                    } elseif ($buttons) {
+                        $body['buttons'] = array_values(array_slice($buttons, 0, 3));
+                    }
+                    if (is_array($template) && $template !== []) {
+                        $body['template'] = $template;
+                    }
+                    if ($isTagged) {
+                        $body['messageTag'] = $data['message_tag'];
+                        $body['messagingType'] = 'MESSAGE_TAG';
+                    }
+                }
+
+                $result = $zernio->sendMessage(
+                    $conversation->zernio_conversation_id,
+                    $conversation->instagramAccount->zernio_account_id,
+                    $body,
+                    (string) \Illuminate\Support\Str::uuid(),
+                );
+
+                $messageData = data_get($result, 'data', $result);
+                $externalId = data_get($messageData, 'messageId');
+                $isMedia = $entry['type'] === 'media';
+
+                $conversation->messages()->create([
+                    'external_message_id' => is_string($externalId) ? $externalId : null,
+                    'direction' => 'outbound',
+                    'type' => $isMedia ? $entry['attachmentType'] : 'text',
+                    'text' => $text !== '' ? $text : null,
+                    'status' => 'sent',
+                    'source' => 'panel',
+                    'attachments' => $isMedia ? [[
+                        'type' => $entry['attachmentType'],
+                        'url' => $entry['attachmentUrl'],
+                        'filename' => $entry['attachmentName'] ?? null,
+                    ]] : null,
+                    'sent_at' => now(),
+                ]);
+                $sentCount++;
+            }
 
             $conversation->update(['last_message_at' => now(), 'needs_human' => false]);
 
-            return back()->with('success', 'پیام با موفقیت ارسال شد.');
+            return back()->with('success', $sentCount > 1 ? 'پیام‌ها با موفقیت ارسال شدند.' : 'پیام با موفقیت ارسال شد.');
         } catch (\Throwable $e) {
             report($e);
             return back()->withErrors(['message' => 'ارسال پیام انجام نشد. وضعیت اتصال و اطلاعات پیام را بررسی کنید.']);
@@ -1312,6 +1353,41 @@ class PanelController extends Controller
         if (!is_string($raw) || trim($raw) === '') return [];
         $decoded = json_decode($raw, true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Decode the composer message queue (compose_sequence_json) into a
+     * normalized, sendable list. Invalid or empty entries are dropped.
+     */
+    private function decodeComposeQueue(?string $raw): array
+    {
+        if (! is_string($raw) || trim($raw) === '') return [];
+        $decoded = json_decode($raw, true);
+        if (! is_array($decoded)) return [];
+
+        $entries = [];
+        foreach (array_slice($decoded, 0, 20) as $item) {
+            if (! is_array($item)) continue;
+            $type = (string) ($item['type'] ?? 'text');
+            $text = trim((string) ($item['message'] ?? ''));
+            $url = trim((string) ($item['attachmentUrl'] ?? ''));
+
+            if ($type === 'media') {
+                if ($url === '') continue;
+                $attachmentType = strtolower((string) ($item['attachmentType'] ?? 'file'));
+                $entries[] = [
+                    'type' => 'media',
+                    'message' => mb_substr($text, 0, 10000),
+                    'attachmentUrl' => $url,
+                    'attachmentType' => in_array($attachmentType, ['image', 'video', 'audio', 'file'], true) ? $attachmentType : 'file',
+                    'attachmentName' => mb_substr(trim((string) ($item['attachmentName'] ?? '')), 0, 255) ?: null,
+                ];
+            } elseif ($text !== '') {
+                $entries[] = ['type' => 'text', 'message' => mb_substr($text, 0, 10000)];
+            }
+        }
+
+        return $entries;
     }
 
     private function decodeJsonValue(?string $raw): mixed
