@@ -554,6 +554,34 @@
     // Inbox filtering
     const inboxSearch=qs('#inboxSearch'); inboxSearch?.addEventListener('input',()=>{const q=inboxSearch.value.toLowerCase().trim();qsa('[data-inbox-row]').forEach(row=>row.style.display=!q||row.dataset.search.includes(q)?'':'none');});
 
+    // Inbox conversation: open at the newest message instead of the first one.
+    const inboxStream=qs('#messageStream');
+    const scrollInboxToLatest=(behavior='auto')=>{
+        if(!inboxStream)return;
+        if(inboxStream.scrollHeight>inboxStream.clientHeight+4){
+            inboxStream.scrollTo({top:inboxStream.scrollHeight,behavior});
+            return;
+        }
+        // On narrow screens the stream grows with the page instead of
+        // scrolling internally, so bring the latest bubble into view.
+        inboxStream.lastElementChild?.scrollIntoView({behavior,block:'nearest'});
+    };
+    const bindInboxMediaScroll=root=>{
+        qsa('img,video',root).forEach(media=>{
+            const isImage=media.tagName==='IMG';
+            if(isImage?media.complete:media.readyState>=1)return;
+            media.addEventListener(isImage?'load':'loadedmetadata',()=>scrollInboxToLatest('auto'),{once:true});
+        });
+    };
+    if(inboxStream){
+        const jumpToLatest=()=>scrollInboxToLatest('auto');
+        jumpToLatest();
+        requestAnimationFrame(()=>{jumpToLatest();requestAnimationFrame(jumpToLatest);});
+        window.addEventListener('load',jumpToLatest,{once:true});
+        if(document.fonts?.ready)document.fonts.ready.then(jumpToLatest).catch(()=>{});
+        bindInboxMediaScroll(inboxStream);
+    }
+
     // Inbox composer: serialize the interactive rows (quick replies / buttons) to JSON before submit
     const inboxForm=qs('#inboxComposerForm');
     if(inboxForm){
@@ -590,7 +618,8 @@
                 if(stream&&data.html){
                     qs('.empty-chat',stream)?.remove();
                     stream.insertAdjacentHTML('beforeend',data.html);
-                    stream.scrollTo({top:stream.scrollHeight,behavior:'smooth'});
+                    bindInboxMediaScroll(stream);
+                    scrollInboxToLatest('smooth');
                 }
                 const field=qs('#inboxMessage',inboxForm);
                 if(field){field.value='';field.dispatchEvent(new Event('input',{bubbles:true}));}
