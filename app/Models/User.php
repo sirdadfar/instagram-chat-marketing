@@ -4,13 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Notifications\Notifiable;
+use Illuminate\Foundation\Auth\User as Authenticatable;
 
-class User extends Model
+class User extends Authenticatable
 {
-    use Notifiable;
-
     protected $fillable = ['name', 'username', 'email', 'password', 'is_admin', 'status', 'zernio_api_key_enc'];
     protected $hidden = ['password', 'remember_token', 'zernio_api_key_enc'];
     protected $casts = [
