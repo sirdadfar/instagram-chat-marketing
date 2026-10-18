@@ -15,7 +15,7 @@
 
 ## [![EN](https://img.shields.io/badge/lang-EN-5A67D8)](#english) <a id="english"></a>
 
-A private, production-oriented **Instagram automation panel** built on top of the [Zernio](https://zernio.com) Instagram API. It turns comment/story/message events into reliable, rate-limited, fully logged automations — public replies, private replies, DMs, follow-gates, tagging and comment moderation — with a Persian RTL management UI.
+A private, production-oriented **multi-tenant Instagram automation panel** built on top of the [Zernio](https://zernio.com) Instagram API. It turns comment/story/message events into reliable, rate-limited, fully logged automations — public replies, private replies, DMs, follow-gates, tagging and comment moderation — with a Persian RTL management UI.
 
 > **Zero Redis. Zero Node build.** Queue is database-backed, assets are plain CSS/JS, and deployment is Apache + Supervisor + GitHub Actions.
 
@@ -42,6 +42,13 @@ A private, production-oriented **Instagram automation panel** built on top of th
 - **Local contact/conversation store** (`isFollower`, follower count, verified badge, profile data)
 - **Audit log + automation logs + system health page**
 - **Analytics dashboard** built on runs, logs and messages
+
+#### 🏢 Multi-tenant Accounts
+- **Open registration:** every user registers with username + password; the first user created automatically becomes admin
+- **Hard data isolation:** page ownership (`user_id`) is the boundary for everything — automations, inbox, contacts, comments, content, message templates and media library
+- **Per-user Zernio key:** each user enters their own API key in Settings; it is stored **encrypted in the database** and takes priority over the server's `.env` fallback
+- **Admin supervision:** activate/deactivate users, reset passwords, promote to admin, delete accounts and reassign page ownership
+- **Hardened auth:** uniform login errors (no username enumeration), throttled open registration, session login with "remember me"
 
 #### 🎨 Panel (Persian RTL)
 - Dashboard, automations builder (wizard + workflow builder), visual **media picker** (posts/stories as cards with video/reels/album filters, caption search and pagination)
@@ -86,7 +93,7 @@ Action Executor
 Zernio API → Instagram
 ```
 
-Panel HTTP layer: `PanelController` · `AuthController` · `PanelAuth` middleware (password-hash auth) · Blade views, plain CSS/JS.
+Panel HTTP layer: `PanelController` · `AuthController` (username/password session auth) · `PanelAuth` middleware · Blade views, plain CSS/JS.
 
 ---
 
@@ -104,8 +111,9 @@ php artisan migrate --force
 Configure Zernio credentials in `.env` (`ZERNIO_API_KEY`, `ZERNIO_WEBHOOK_SECRET`, …), then:
 
 ```bash
-# Hash and set the panel admin password
-php artisan panel:password-hash        # → PANEL_ADMIN_PASSWORD_HASH
+# (Optional) bootstrap the admin user from .env values — idempotent, safe on every deploy
+# PANEL_ADMIN_EMAIL / PANEL_ADMIN_USERNAME / PANEL_ADMIN_PASSWORD
+php artisan panel:adopt-legacy
 
 # Sync the connected Instagram account into the local store
 php artisan zernio:account [ACCOUNT_ID] --username=your_username
@@ -117,6 +125,8 @@ php artisan zernio:webhook --url=https://your-domain.example/api/webhooks/zernio
 php artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90
 ```
 
+Then open the panel and **register** — the first user automatically becomes admin. Each user then adds their own Zernio API key in Settings (encrypted at rest, overrides the server `.env`).
+
 Full production guide: [`docs/PRODUCTION.md`](docs/PRODUCTION.md) · installation notes: [`docs/INSTALL.md`](docs/INSTALL.md)
 
 ---
@@ -125,7 +135,8 @@ Full production guide: [`docs/PRODUCTION.md`](docs/PRODUCTION.md) · installatio
 
 | Command | Description |
 |---|---|
-| `panel:password-hash` | Generates a bcrypt hash for `PANEL_ADMIN_PASSWORD_HASH` |
+| `panel:adopt-legacy` | Creates the admin user (if missing) and attaches ownerless pages/media/templates to it — idempotent, runs automatically after deploy |
+| `panel:password-hash` | Legacy utility: bcrypt-hashes a password into `PANEL_ADMIN_PASSWORD_HASH` (pre-tenant installs) |
 | `zernio:account [id] --username=` | Syncs Instagram account info from Zernio |
 | `zernio:webhook --url=` | Creates the production webhook subscription; `--test=<id>` fires a test delivery |
 | `zernio:sync-automation {id}` | Pushes one automation to Zernio's native Comment Automation |
@@ -205,6 +216,7 @@ stopwaitsecs=3600
 - [ ] `APP_DEBUG=false` in production
 - [ ] Long random `ZERNIO_WEBHOOK_SECRET` (HMAC verification depends on it)
 - [ ] `ZERNIO_API_KEY` never exposed to browser JS
+- [ ] Per-user Zernio keys stored encrypted (`zernio_api_key_enc`) — the server key exists only as fallback
 - [ ] `.env` never committed
 - [ ] MySQL restricted to localhost/private network
 - [ ] HTTPS everywhere
@@ -267,7 +279,7 @@ vendor/bin/pint      # Code style
 
 ## [![FA](https://img.shields.io/badge/زبان-فارسی-38A89D)](#) <a id="فارسی"></a>
 
-پنل حرفه‌ای و production-oriented **اتوماسیون اینستاگرام** بر پایه API [زرنیو (Zernio)](https://zernio.com). این پنل رویدادهای کامنت/استوری/پیام اینستاگرام را به اتوماسیون‌های مطمئن، رِیت‌لیمیت‌شده و کاملاً لاگ‌شده تبدیل می‌کند — پاسخ عمومی، پاسخ خصوصی، دایرکت، Follow Gate، تگ‌گذاری مخاطب و مدیریت نظرات — با یک ادمین فارسی RTL موبایل‌محور.
+پنل حرفه‌ای و production-oriented **اتوماسیون اینستاگرام چندکاربره (Multi-tenant)** بر پایه API [زرنیو (Zernio)](https://zernio.com). این پنل رویدادهای کامنت/استوری/پیام اینستاگرام را به اتوماسیون‌های مطمئن، رِیت‌لیمیت‌شده و کاملاً لاگ‌شده تبدیل می‌کند — پاسخ عمومی، پاسخ خصوصی، دایرکت، Follow Gate، تگ‌گذاری مخاطب و مدیریت نظرات — با یک ادمین فارسی RTL موبایل‌محور.
 
 > **بدون Redis و بدون Build Node.** صف روی دیتابیس، أسست‌ها CSS/JS ساده، و استقرار روی Apache + Supervisor + GitHub Actions.
 
@@ -294,6 +306,13 @@ vendor/bin/pint      # Code style
 - **ذخیره‌ی محلی مخاطب/گفتگو** (`isFollower`، تعداد فالوور، تیک آبی، داده‌های پروفایل)
 - **Audit Log** + لاگ اجرای اتوماسیون‌ها + صفحه **سلامت سیستم**
 - **داشبورد آنالیتیکس** بر پایه runها، لاگ‌ها و پیام‌ها
+
+#### 🏢 حساب‌های چندکاربره
+- **ثبت‌نام آزاد:** هر کاربر با نام کاربری و رمز ثبت‌نام می‌کند؛ نخستین کاربرِ ایجادشده به‌طور خودکار ادمین می‌شود
+- **تفکیک سخت داده‌ها:** مالکیت پیج (`user_id`) مرز همه داده‌هاست — اتوماسیون‌ها، اینباکس، مخاطبین، نظرات، محتوا، قالب پیام و کتابخانه رسانه
+- **کلید اختصاصی هر کاربر:** هر کاربر کلید Zernio خود را در «تنظیمات» وارد می‌کند؛ **رمزنگاری‌شده در دیتابیس** ذخیره می‌شود و اولویتش از `.env` سرور بیشتر است
+- **نظارت ادمین:** فعال/غیرفعال کردن کاربر، ریست رمز، تبدیل به ادمین، حذف حساب و واگذاری مالکیت پیج‌ها
+- **ورود سخت‌گیرانه:** خطای یکسان در لاگین (بدون امکان شناسایی نام‌های کاربری ثبت‌شده)، ثبت‌نام rate-limit شده، ورود session-based با «مرا به خاطر بسپار»
 
 #### 🎨 پنل فارسی RTL
 - داشبورد · سازنده اتوماسیون (فرم سریع + Workflow Builder) · **انتخاب بصری محتوا** (کارت تصویری پست‌ها/استوری‌ها با فیلتر ویدیو/ریلز/آلبوم و جستجو روی کپشن و pagination)
@@ -338,7 +357,7 @@ Action Executor
 Zernio API → Instagram
 ```
 
-لایه HTTP پنل: `PanelController` · `AuthController` · میدل‌ور `PanelAuth` (لاگین با هش رمز) · تمپلیت‌های Blade با CSS/JS ساده.
+لایه HTTP پنل: `PanelController` · `AuthController` (ورود با نام کاربری/رمز و session) · میدل‌ور `PanelAuth` · تمپلیت‌های Blade با CSS/JS ساده.
 
 ---
 
@@ -356,8 +375,9 @@ php artisan migrate --force
 مقادیر مربوط به Zernio را در `.env` تنظیم کنید (`ZERNIO_API_KEY`, `ZERNIO_WEBHOOK_SECRET`, …) و سپس:
 
 ```bash
-# ساخت هش رمز مدیر پنل و قرار دادن در PANEL_ADMIN_PASSWORD_HASH
-php artisan panel:password-hash
+# (اختیاری) ساخت کاربر ادمین از مقادیر .env — idempotent و در هر deploy امن
+# PANEL_ADMIN_EMAIL / PANEL_ADMIN_USERNAME / PANEL_ADMIN_PASSWORD
+php artisan panel:adopt-legacy
 
 # همگام‌سازی اکانت اینستاگرام متصل از Zernio
 php artisan zernio:account [ACCOUNT_ID] --username=your_username
@@ -369,6 +389,8 @@ php artisan zernio:webhook --url=https://your-domain.example/api/webhooks/zernio
 php artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90
 ```
 
+سپس پنل را باز کنید و **ثبت‌نام** کنید — نخستین کاربر به‌طور خودکار ادمین می‌شود. سپس هر کاربر کلید اختصاصی Zernio خود را در «تنظیمات» وارد می‌کند (رمزنگاری‌شده ذخیره می‌شود و بر `.env` سرور اولویت دارد).
+
 راهنمای کامل Production: [`docs/PRODUCTION.md`](docs/PRODUCTION.md) · نصب: [`docs/INSTALL.md`](docs/INSTALL.md)
 
 ---
@@ -377,7 +399,8 @@ php artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout
 
 | دستور | توضیح |
 |---|---|
-| `panel:password-hash` | تولید هش bcrypt برای `PANEL_ADMIN_PASSWORD_HASH` |
+| `panel:adopt-legacy` | ساخت کاربر ادمین (در صورت نبود) و واگذاری پیج‌ها/رسانه‌ها/قالب‌های بی‌صاحب به ادمین — idempotent و پس از هر deploy خودکار |
+| `panel:password-hash` | ابزار قدیمی: هش bcrypt برای `PANEL_ADMIN_PASSWORD_HASH` (نصب‌های قبل از چندکاربره شدن) |
 | `zernio:account [id] --username=` | همگام‌سازی اطلاعات اکانت اینستاگرام از Zernio |
 | `zernio:webhook --url=` | ساخت اشتراک وبهوک production؛ `--test=<id>` برای ارسال تست |
 | `zernio:sync-automation {id}` | سینک یک اتوماسیون با Comment Automation بومی زرنیو |
@@ -457,6 +480,7 @@ stopwaitsecs=3600
 - [ ] `APP_DEBUG=false` در production
 - [ ] `ZERNIO_WEBHOOK_SECRET` تصادفی و طولانی (HMAC به آن وابسته است)
 - [ ] هرگز `ZERNIO_API_KEY` را به جاوااسکریپت مرورگر expose نکنید
+- [ ] کلیدهای Zernio هر کاربر رمزنگاری‌شده (`zernio_api_key_enc`) ذخیره می‌شوند — کلید سرور فقط نقش fallback دارد
 - [ ] هرگز `.env` را commit نکنید
 - [ ] MySQL محدود به localhost یا شبکه داخلی
 - [ ] HTTPS در تمام پنل و وبهوک
