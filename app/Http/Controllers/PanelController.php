@@ -949,10 +949,48 @@ class PanelController extends Controller
             return back()->with('success', $flashMessage);
         } catch (\Throwable $e) {
             report($e);
+            $detail = $this->friendlySendError($e);
             return $wantsJson
-                ? response()->json(['ok' => false, 'message' => 'ارسال پیام انجام نشد. وضعیت اتصال و اطلاعات پیام را بررسی کنید.'], 500)
-                : back()->withErrors(['message' => 'ارسال پیام انجام نشد. وضعیت اتصال و اطلاعات پیام را بررسی کنید.']);
+                ? response()->json(['ok' => false, 'message' => $detail], 500)
+                : back()->withErrors(['message' => $detail]);
         }
+    }
+
+    /**
+     * Turn a send failure into a message the operator can act on:
+     * common HTTP statuses map to specific hints, otherwise the upstream
+     * (Zernio) message is surfaced. The generic fallback stays last.
+     */
+    private function friendlySendError(\Throwable $e): string
+    {
+        $fallback = 'ارسال پیام انجام نشد. وضعیت اتصال و اطلاعات پیام را بررسی کنید.';
+
+        if ($e instanceof \Illuminate\Http\Client\RequestException) {
+            $status = $e->response?->status();
+            $upstream = trim((string) ($e->response?->json('message') ?? $e->response?->json('error') ?? ''));
+
+            $hint = match (true) {
+                $status === 401 => 'کلید دسترسی سرویس نامعتبر است؛ تنظیمات حساب را بررسی کن.',
+                $status === 403 => 'کلید دسترسی به این حساب اجازه ارسال ندارد؛ سطح دسترسی را بررسی کن.',
+                $status === 404 => 'گفتگو یا حساب در سرویس پیدا نشد؛ شناسه حساب/گفتگو به‌روز نیست.',
+                $status === 429 => 'محدودیت نرخ ارسال سرویس فعال است؛ چند لحظه بعد تلاش کن.',
+                $status >= 500 && $status !== null => 'سرویس ارسال در دسترس نیست؛ بعداً تلاش کن.',
+                default => null,
+            };
+
+            if ($hint !== null) {
+                return $upstream !== '' ? $hint.' ('.$upstream.')' : $hint;
+            }
+            if ($upstream !== '') {
+                return $fallback.' ('.$upstream.')';
+            }
+        }
+
+        if (is_string($e->getMessage()) && trim($e->getMessage()) !== '') {
+            return $fallback.' ('.$e->getMessage().')';
+        }
+
+        return $fallback;
     }
 
     public function archiveConversation(Conversation $conversation, ZernioClient $zernio)
