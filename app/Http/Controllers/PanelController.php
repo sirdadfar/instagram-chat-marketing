@@ -1232,8 +1232,21 @@ class PanelController extends Controller
             $message = 'کلید سرویس و Secret وب‌هوک تو ذخیره و رمزنگاری شدند.';
             if ($sync['error'] !== null) {
                 $message .= ' ' . $sync['error'];
-            } elseif ($sync['created'] > 0 || $sync['updated'] > 0) {
-                $message .= " پیج‌های اینستاگرام شناسایی شدند: {$sync['created']} اتصال جدید، {$sync['updated']} به‌روزرسانی.";
+            } else {
+                $parts = [];
+                if ($sync['created'] > 0) {
+                    $parts[] = "{$sync['created']} پیج جدید";
+                }
+                if ($sync['claimed'] > 0) {
+                    $parts[] = "{$sync['claimed']} پیج منتقل‌شده به حساب تو";
+                }
+                if ($sync['updated'] > 0) {
+                    $parts[] = "{$sync['updated']} پیج به‌روزرسانی‌شده";
+                }
+
+                $message .= $parts !== []
+                    ? ' پیج‌های اینستاگرام شناسایی شدند: ' . implode('، ', $parts) . '.'
+                    : ' هیچ پیج اینستاگرامی متصل به این کلید در سرویس پیدا نشد.';
             }
 
             return back()->with('success', $message);
@@ -1299,7 +1312,7 @@ class PanelController extends Controller
      */
     private function syncZernioAccounts(): array
     {
-        $result = ['created' => 0, 'updated' => 0, 'error' => null];
+        $result = ['created' => 0, 'updated' => 0, 'claimed' => 0, 'error' => null];
 
         if (! Credentials::zernioApiKey()) {
             $result['error'] = 'کلید شخصی سرویس تنظیم نشده است.';
@@ -1309,9 +1322,21 @@ class PanelController extends Controller
 
         try {
             $response = app(ZernioClient::class)->listAccounts(['platform' => 'instagram']);
-            $items = data_get($response, 'accounts');
+            $items = data_get($response, 'accounts')
+                ?? data_get($response, 'data.accounts')
+                ?? data_get($response, 'data')
+                ?? $response;
+
             if (! is_array($items)) {
-                $items = data_get($response, 'data.accounts', data_get($response, 'data', []));
+                $items = [];
+            }
+
+            // Some deployments answer with a single account object or an
+            // associative map instead of a plain list; normalise both.
+            if ($items !== [] && ! array_is_list($items)) {
+                $items = (isset($items['_id']) || isset($items['id']) || isset($items['accountId']))
+                    ? [$items]
+                    : array_values($items);
             }
 
             $activeProviderStatuses = ['active', 'connected', 'authenticated', 'ready', 'online', 'enabled'];
@@ -1338,11 +1363,25 @@ class PanelController extends Controller
                 $existing = InstagramAccount::where('zernio_account_id', (string) $accountId)->first();
 
                 if ($existing) {
-                    // Owned by someone else → never claim it.
-                    if ($existing->user_id === auth()->id()) {
+                    if ((int) $existing->user_id === (int) auth()->id()) {
                         $existing->update($attributes);
                         $result['updated']++;
+                    } else {
+                        // The personal key returned this page, so the key owner is
+                        // the real owner. This covers legacy pages that were
+                        // previously attached to the admin account: without this
+                        // they were silently skipped and the new user saw no
+                        // page even though the key was saved.
+                        logger()->info('Instagram page ownership moved to the key owner', [
+                            'account_id' => (string) $accountId,
+                            'from_user_id' => $existing->user_id,
+                            'to_user_id' => auth()->id(),
+                        ]);
+
+                        $existing->update($attributes + ['user_id' => auth()->id()]);
+                        $result['claimed']++;
                     }
+
                     continue;
                 }
 
@@ -1373,9 +1412,20 @@ class PanelController extends Controller
             return back()->withErrors(['zernio_api_key' => $result['error']]);
         }
 
-        $message = $result['created'] > 0 || $result['updated'] > 0
-            ? "همگام‌سازی انجام شد: {$result['created']} پیج جدید اتصال داده شد و {$result['updated']} پیج به‌روزرسانی شد."
-            : 'همگام‌سازی انجام شد: پیج جدیدی در سرویس پیدا نشد.';
+        $parts = [];
+        if ($result['created'] > 0) {
+            $parts[] = "{$result['created']} پیج جدید";
+        }
+        if ($result['claimed'] > 0) {
+            $parts[] = "{$result['claimed']} پیج منتقل‌شده به حساب تو";
+        }
+        if ($result['updated'] > 0) {
+            $parts[] = "{$result['updated']} پیج به‌روزرسانی‌شده";
+        }
+
+        $message = $parts !== []
+            ? 'همگام‌سازی انجام شد: ' . implode('، ', $parts) . '.'
+            : 'همگام‌سازی انجام شد: هیچ پیج اینستاگرامی متصل به این کلید در سرویس پیدا نشد.';
 
         return back()->with('success', $message);
     }
