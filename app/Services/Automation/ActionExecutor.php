@@ -43,6 +43,31 @@ class ActionExecutor {
   $r=$this->zernio->sendMessage($c['conversation_id'],$a->account->zernio_account_id,$body,(string)Str::uuid());
   return ['action'=>'direct_message','status'=>'sent','attachmentType'=>$body['attachmentType']??null,'response'=>$r];
  }
+ /**
+  * Keyword-less follow gate: sends only the follow prompt to non-followers.
+  * Returns true when a prompt was actually sent (the main DM stays pending).
+  */
+ public function enforceFollowGate(Automation $a,array $c):bool {
+  if (empty($c['user_id']) || empty($c['conversation_id'])) return false;
+  try {
+   $follow = $this->zernio->getFollowStatus($a->account->zernio_account_id, (string) $c['user_id'], true);
+  } catch (\Throwable $e) {
+   $follow = ['isFollower' => data_get($c, 'instagram_profile.isFollower')];
+  }
+  if (data_get($follow, 'isFollower') === true) return false;
+  // Do not nag: one pending prompt per contact/automation per day.
+  $contact = Contact::where('instagram_account_id',$a->account->id)->where('external_user_id',(string)$c['user_id'])->first();
+  $pending = data_get($contact?->metadata, 'follow_gate_pending');
+  if (is_array($pending)
+      && (int) ($pending['automation_id'] ?? 0) === (int) $a->id
+      && !empty($pending['created_at'])
+      && \Illuminate\Support\Carbon::parse($pending['created_at'])->gt(now()->subDay())) {
+   return false;
+  }
+  $token = $this->storeFollowGatePending($a, $c);
+  $this->sendFollowGate($a, $c, $token);
+  return true;
+ }
  private function storeFollowGatePending(Automation $a,array $c):string {
   if (empty($c['user_id'])) return ''; 
   $contact = Contact::updateOrCreate(

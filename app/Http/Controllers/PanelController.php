@@ -1289,7 +1289,18 @@ class PanelController extends Controller
             ->get()
             ->each(function (Automation $automation) use ($nativeSync): void {
                 try {
-                    $nativeSync->sync($automation);
+                    $response = $nativeSync->sync($automation);
+                    $remoteId = data_get($response, 'id', data_get($response, '_id', data_get($response, 'commentAutomationId')));
+
+                    // Legacy comment/story automations that used to run locally must
+                    // switch to the native path, otherwise the follow gate (including
+                    // the keyword-less option) never reaches Instagram.
+                    if ($remoteId) {
+                        $automation->update([
+                            'zernio_automation_id' => (string) $remoteId,
+                            'execution_mode' => 'zernio',
+                        ]);
+                    }
                 } catch (\Throwable $e) {
                     report($e);
                 }

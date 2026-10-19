@@ -14,7 +14,17 @@ class AutomationEngine {
   $aud=$this->audience($a,$context);
   $global=(bool)AppSetting::getValue('automation_global_enabled',true) && $a->global_enabled;
   $business=!$a->business_hours_only || $this->hours->allowed();
-  return ['pass'=>$keyword['pass']&&$targetOk&&$triggerOk&&$aud['pass']&&$global&&$business,'keywords'=>$keyword,'target_match'=>$targetOk,'trigger_match'=>$triggerOk,'audience'=>$aud,'global_enabled'=>$global,'business_hours'=>$business];
+  // «بررسی فالو حتی بدون تطابق کلمه کلیدی»: پیام بدون کلیدواژه هم باید وارد
+  // بررسی فالو شود؛ ولی فقط پیام فالو ارسال می‌شود (نه پیام اصلی).
+  $gateOnly=!$keyword['pass']&&empty($keyword['excluded'])&&$this->keywordlessGateAllowed($a);
+  $pass=($keyword['pass']||$gateOnly)&&$targetOk&&$triggerOk&&$aud['pass']&&$global&&$business;
+  return ['pass'=>$pass,'gate_only'=>$pass&&$gateOnly,'keywords'=>$keyword,'target_match'=>$targetOk,'trigger_match'=>$triggerOk,'audience'=>$aud,'global_enabled'=>$global,'business_hours'=>$business];
+ }
+ private function keywordlessGateAllowed(Automation $a):bool {
+  if(!(bool)AppSetting::getValue('follow_gate_enabled',true))return false;
+  if(!(bool)AppSetting::getValue('follow_gate_without_keywords',false))return false;
+  $a->loadMissing('actions');
+  return $a->actions->contains(static fn($action):bool=>$action->action==='direct_message');
  }
  private function audience(Automation $a,array $c):array { $cfg=$a->audience??[]; $profile=$c['instagram_profile']??[]; $status=$profile['isFollower'] ?? null; $wanted=$cfg['followerStatus']??'any'; if($wanted==='any')return ['pass'=>true,'status'=>$status]; if($status===null){return ['pass'=>($cfg['whenUnknown']??'send')==='send','status'=>null,'unknown'=>true];} if($wanted==='follower' && $status!==true)return ['pass'=>false,'status'=>$status]; if($wanted==='non_follower' && $status!==false)return ['pass'=>false,'status'=>$status]; if(!empty($cfg['minFollowerCount']) && (int)($profile['followerCount']??0)<(int)$cfg['minFollowerCount'])return ['pass'=>false,'status'=>$status]; return ['pass'=>true,'status'=>$status]; }
  public function canRun(Automation $a,?string $userKey):array { if(!$userKey)return [true,null]; $row=AutomationUserCooldown::firstOrCreate(['automation_id'=>$a->id,'user_key'=>$userKey],['daily_count'=>0,'count_date'=>now()->toDateString()]); if(!$row->count_date || $row->count_date->toDateString()!==now()->toDateString()){$row->update(['daily_count'=>0,'count_date'=>now()->toDateString()]);$row->refresh();} if($a->max_per_user_day!==null && $row->daily_count >= $a->max_per_user_day)return [false,'daily_limit']; if($a->cooldown_seconds>0 && $row->last_executed_at && $row->last_executed_at->gt(now()->subSeconds($a->cooldown_seconds)))return [false,'cooldown']; if(!$this->limiter->allow('automation:'.$a->id.':global',(int)($a->settings['rate_limit_per_minute']??30),60))return [false,'rate_limit']; return [true,null]; }
