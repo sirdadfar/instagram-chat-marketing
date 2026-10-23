@@ -29,10 +29,10 @@ final class Credentials
         // Older installations may still contain a plaintext key from before
         // credentials were encrypted, so resolve both storage formats safely.
         if ($context !== null) {
+            // Never fall through to another signed-in user's key in a queued job.
             $key = self::userApiKey($context);
-            if ($key !== null) {
-                return $key;
-            }
+
+            return $key ?? self::serverApiKeyFallback();
         }
 
         // Web requests use the signed-in user's personal key.
@@ -44,7 +44,11 @@ final class Credentials
             }
         }
 
-        // Keep the documented server key as a fallback for legacy deployments.
+        return self::serverApiKeyFallback();
+    }
+
+    private static function serverApiKeyFallback(): ?string
+    {
         $fallback = config('zernio.api_key');
 
         return is_string($fallback) && trim($fallback) !== '' ? trim($fallback) : null;
