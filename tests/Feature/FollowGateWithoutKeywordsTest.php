@@ -35,6 +35,7 @@ class FollowGateWithoutKeywordsTest extends TestCase
             'trigger' => AutomationTrigger::DirectMessage,
             'status' => 'active',
             'execution_mode' => 'local',
+            'global_enabled' => true,
             'match_mode' => 'any',
             'audience' => ['followerStatus' => 'any', 'whenUnknown' => 'send'],
             'settings' => [],
@@ -114,6 +115,9 @@ class FollowGateWithoutKeywordsTest extends TestCase
 
     public function test_enforce_follow_gate_prompts_a_non_follower_once(): void
     {
+        // HTTP is faked, but the client still requires a non-empty key before issuing a request.
+        config(['zernio.api_key' => 'test-zernio-key']);
+
         Http::fake([
             '*/follow-status/*' => Http::response(['isFollower' => false], 200),
             '*' => Http::response(['success' => true], 200),
@@ -149,6 +153,8 @@ class FollowGateWithoutKeywordsTest extends TestCase
 
     public function test_enforce_follow_gate_stays_silent_for_followers(): void
     {
+        config(['zernio.api_key' => 'test-zernio-key']);
+
         Http::fake([
             '*/follow-status/*' => Http::response(['isFollower' => true], 200),
         ]);
