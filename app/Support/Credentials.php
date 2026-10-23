@@ -25,19 +25,46 @@ final class Credentials
 
     public static function zernioApiKey(?User $context = null): ?string
     {
-        // 1) explicit context (jobs: page owner)
-        if ($context !== null && is_string($context->zernio_api_key_enc) && $context->zernio_api_key_enc !== '') {
-            return self::decrypt($context->zernio_api_key_enc);
+        // Queue jobs must use the owner of the Instagram page being processed.
+        // Older installations may still contain a plaintext key from before
+        // credentials were encrypted, so resolve both storage formats safely.
+        if ($context !== null) {
+            $key = self::userApiKey($context);
+            if ($key !== null) {
+                return $key;
+            }
         }
 
-        // 2) session user's own key (web requests)
+        // Web requests use the signed-in user's personal key.
         $user = auth()->user();
-        if ($user instanceof User && is_string($user->zernio_api_key_enc) && $user->zernio_api_key_enc !== '') {
-            return self::decrypt($user->zernio_api_key_enc);
+        if ($user instanceof User) {
+            $key = self::userApiKey($user);
+            if ($key !== null) {
+                return $key;
+            }
         }
 
-        // No personal key → no service access. The user must add one in Settings.
-        return null;
+        // Keep the documented server key as a fallback for legacy deployments.
+        $fallback = config('zernio.api_key');
+
+        return is_string($fallback) && trim($fallback) !== '' ? trim($fallback) : null;
+    }
+
+    private static function userApiKey(User $user): ?string
+    {
+        $raw = $user->zernio_api_key_enc;
+
+        if (! is_string($raw) || trim($raw) === '') {
+            return null;
+        }
+
+        // New records use encrypted values with the explicit marker.
+        if (Str::startsWith($raw, self::ENC_PREFIX)) {
+            return self::decrypt($raw);
+        }
+
+        // Backward compatibility for keys saved before encryption was introduced.
+        return trim($raw);
     }
 
     /** Stores (or replaces) the service key on the given user. */
