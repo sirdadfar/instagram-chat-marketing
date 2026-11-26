@@ -38,11 +38,13 @@
 <div class="studio-main">
 <section class="studio-step is-active" data-step-panel="1">
     <div class="step-topline"><span class="step-index">۱</span><div><div class="eyebrow">محرک</div><h2>چه اتفاقی شروعش کند؟</h2><p>همان اتفاقی را انتخاب کن که باید باعث اجرای اتوماسیون شود.</p></div></div>
+    <input type="hidden" name="triggers_submitted" value="1">
     <div class="choice-grid large-choice" data-trigger-picker>
-        <label class="choice-card selected"><input type="radio" name="trigger" value="comment" checked><span class="choice-icon">💬</span><strong>نظر روی پست</strong><small>با ثبت یک کامنت، اتوماسیون فعال شود.</small></label>
-        <label class="choice-card"><input type="radio" name="trigger" value="story_reply"><span class="choice-icon">◌</span><strong>پاسخ به استوری</strong><small>وقتی کسی به استوری پاسخ بدهد.</small></label>
-        <label class="choice-card"><input type="radio" name="trigger" value="direct_message"><span class="choice-icon">✉</span><strong>پیام مستقیم</strong><small>با دریافت دایرکت جدید، پاسخ داده شود.</small></label>
+        <label class="choice-card selected"><input type="checkbox" name="triggers[]" value="comment" checked><span class="choice-icon">💬</span><strong>نظر روی پست</strong><small>با ثبت یک کامنت، اتوماسیون فعال شود.</small></label>
+        <label class="choice-card"><input type="checkbox" name="triggers[]" value="story_reply"><span class="choice-icon">◌</span><strong>پاسخ به استوری</strong><small>وقتی کسی به استوری پاسخ بدهد.</small></label>
+        <label class="choice-card"><input type="checkbox" name="triggers[]" value="direct_message"><span class="choice-icon">✉</span><strong>پیام مستقیم</strong><small>با دریافت دایرکت جدید، پاسخ داده شود.</small></label>
     </div>
+    <p class="field-note">می‌توانی چند محرک را هم‌زمان تیک بزنی؛ همان پیام برای همه‌ی آن‌ها ارسال می‌شود.</p>
     <div class="goal-card" id="goalSection">
         <div><strong>برای کامنت چه کاری انجام شود؟</strong><span>می‌توانی پاسخ عمومی یا پیام خصوصی را انتخاب کنی.</span></div>
         <div class="goal-options">
@@ -82,8 +84,8 @@
             @include('partials.message_attachment_composer',['prefix'=>'dm','automationTrigger'=>'comment'])
         </div>
         <div class="follow-gate-card" id="followGateCard" hidden>
-            <div class="follow-gate-head"><div><span class="eyebrow">شرط دنبال‌کردن</span><strong>قبل از ارسال پیام اصلی، دنبال‌کردن صفحه را بررسی کن</strong><p>اگر مخاطب دنبال‌کننده نباشد، ابتدا پیام راهنما را می‌بیند و بعد از تأیید، وضعیت دنبال‌کردن بررسی می‌شود.</p></div><input type="hidden" name="follow_gate_enabled" value="0"><label class="toggle-row follow-gate-toggle"><span><strong>فعال باشد</strong><small>فقط برای پیام خصوصی کامنت</small></span><input class="toggle-input" type="checkbox" name="follow_gate_enabled" value="1" id="followGateEnabled"><span class="toggle-ui"></span></label></div>
-            <div class="follow-gate-flow"><span>کامنت</span><b>→</b><span>پیام راهنما</span><b>→</b><span>بررسی دنبال‌کردن</span><b>→</b><span>پیام اصلی</span></div>
+            <div class="follow-gate-head"><div><span class="eyebrow">شرط دنبال‌کردن</span><strong>قبل از ارسال پیام اصلی، دنبال‌کردن صفحه را بررسی کن</strong><p>اگر مخاطب دنبال‌کننده نباشد، ابتدا پیام راهنما را می‌بیند و بعد از تأیید، وضعیت دنبال‌کردن بررسی می‌شود.</p></div><input type="hidden" name="follow_gate_enabled" value="0"><label class="toggle-row follow-gate-toggle"><span><strong>فعال باشد</strong><small>برای همه محرک‌های انتخابی</small></span><input class="toggle-input" type="checkbox" name="follow_gate_enabled" value="1" id="followGateEnabled" @checked((bool)\App\Models\AppSetting::getValue('follow_gate_enabled', true))><span class="toggle-ui"></span></label></div>
+            <div class="follow-gate-flow"><span>محرک‌ها</span><b>→</b><span>پیام راهنما</span><b>→</b><span>بررسی دنبال‌کردن</span><b>→</b><span>پیام اصلی</span></div>
             <div class="follow-gate-fields">
                 <div class="form-field"><label>پیام قبل از بررسی</label><textarea name="follow_gate_message" id="followGateMessage" maxlength="640" placeholder="برای دریافت اطلاعات، لطفاً ابتدا صفحه را دنبال کنید و سپس روی دکمه بررسی بزنید."></textarea></div>
                 <div class="form-field"><label>متن دکمه</label><input name="follow_gate_button_label" id="followGateButtonLabel" maxlength="20" value="بررسی کردم" placeholder="بررسی کردم"></div>

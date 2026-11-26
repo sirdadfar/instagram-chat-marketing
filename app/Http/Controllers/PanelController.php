@@ -475,7 +475,9 @@ class PanelController extends Controller
             'instagram_account_id' => 'required|exists:instagram_accounts,id',
             'name' => 'required|string|max:120',
             'description' => 'nullable|string|max:1000',
-            'trigger' => 'required|in:comment,story_reply,direct_message',
+            'trigger' => 'nullable|in:comment,story_reply,direct_message',
+            'triggers' => 'nullable|array|max:3',
+            'triggers.*' => 'in:comment,story_reply,direct_message',
             'goal' => 'nullable|in:comment_dm,comment_public,dm_reply',
             'status' => 'required|in:draft,active,paused',
             'execution_mode' => 'required|in:local,zernio',
@@ -517,10 +519,21 @@ class PanelController extends Controller
             'follow_gate_not_following_message' => 'nullable|string|max:640',
         ]);
 
-        $followGateEnabled = $d['trigger'] === 'comment'
-            && ($d['goal'] ?? 'comment_dm') !== 'comment_public'
-            && (bool) ($d['follow_gate_enabled'] ?? AppSetting::getValue('follow_gate_enabled', true))
-            && trim((string) ($d['private_reply'] ?? '')) !== '';
+        $triggers = $this->resolveTriggers($d);
+        if ($triggers === []) {
+            return back()
+                ->withErrors(['triggers' => 'حداقل یک محرک را انتخاب کن.'])
+                ->withInput();
+        }
+        $primaryTrigger = $triggers[0];
+        $goal = $primaryTrigger === 'comment' ? ($d['goal'] ?? 'comment_dm') : null;
+        $multiTrigger = count($triggers) > 1;
+        $gateMessage = trim((string) (($d['private_reply'] ?? '') !== '' ? $d['private_reply'] : ($d['dm_message'] ?? '')));
+        $followGateEnabled = $gateMessage !== ''
+            && $this->willSendDirectMessage($triggers, $goal)
+            && (bool) ($d['follow_gate_enabled'] ?? AppSetting::getValue('follow_gate_enabled', true));
+        // "verify" without a gate would silently drop unknown audiences.
+        $unknownAudience = ($d['audience_unknown'] ?? 'send') === 'verify' ? 'send' : ($d['audience_unknown'] ?? 'send');
 
         // The automation's page must belong to the current user.
         $this->authorizeAccountById($d['instagram_account_id']);
@@ -529,12 +542,13 @@ class PanelController extends Controller
             'instagram_account_id' => $d['instagram_account_id'],
             'name' => $d['name'],
             'description' => $d['description'] ?? null,
-            'trigger' => $d['trigger'],
+            'trigger' => $primaryTrigger,
+            'triggers' => $triggers,
             'status' => $d['status'],
-            'execution_mode' => in_array($d['trigger'], ['comment', 'story_reply'], true) ? 'zernio' : $d['execution_mode'],
+            'execution_mode' => $this->executionModeFor($triggers),
             'priority' => $d['priority'],
-            'target_type' => $d['target_type'] ?? null,
-            'target_id' => $d['target_id'] ?? null,
+            'target_type' => $multiTrigger ? null : ($d['target_type'] ?? null),
+            'target_id' => $multiTrigger ? null : ($d['target_id'] ?? null),
             'match_mode' => in_array($d['match_mode'], ['any', 'all'], true) ? $d['match_mode'] : 'any',
             'cooldown_seconds' => $d['cooldown_seconds'],
             'max_per_user_day' => $d['max_per_user_day'] ?? null,
@@ -542,10 +556,11 @@ class PanelController extends Controller
             'handoff_enabled' => (bool) ($d['handoff_enabled'] ?? false),
             'audience' => [
                 'followerStatus' => $followGateEnabled ? 'follower' : $d['audience_follower_status'],
-                'whenUnknown' => $followGateEnabled ? 'verify' : $d['audience_unknown'],
+                'whenUnknown' => $followGateEnabled ? 'verify' : $unknownAudience,
                 'minFollowerCount' => $d['min_follower_count'] ?? null,
             ],
             'settings' => [
+                'goal' => $goal,
                 'matchMode' => $d['match_mode'],
                 'dmMessageVariations' => array_values(array_filter(
                     preg_split('/\r?\n/', (string) ($d['variations'] ?? ''))
@@ -564,6 +579,7 @@ class PanelController extends Controller
         ]);
 
         $this->syncKeywords($a, $d['keywords'] ?? '', $d['excluded_keywords'] ?? '', $d['match_mode']);
+        $d['goal'] = $goal;
         $this->syncActions($a, $d);
 
         $a->load(['keywords', 'actions', 'account']);
@@ -603,6 +619,10 @@ class PanelController extends Controller
             'business_hours_only' => 'nullable|boolean',
             'handoff_enabled' => 'nullable|boolean',
             'match_mode' => 'nullable|in:any,all,contains,exact,word',
+            'triggers' => 'nullable|array|max:3',
+            'triggers.*' => 'in:comment,story_reply,direct_message',
+            'triggers_submitted' => 'nullable|boolean',
+            'trigger' => 'nullable|in:comment,story_reply,direct_message',
             'keywords' => 'nullable|string',
             'excluded_keywords' => 'nullable|string',
             'public_reply' => 'nullable|string|max:2200',
@@ -635,19 +655,42 @@ class PanelController extends Controller
 
         $before = $automation->toArray();
         $matchMode = $d['match_mode'] ?? ($automation->settings['matchMode'] ?? 'any');
-        $triggerValue = $automation->trigger instanceof \BackedEnum ? $automation->trigger->value : (string) $automation->trigger;
-        $goalValue = $d['goal'] ?? ($triggerValue === 'comment' ? 'comment_dm' : 'dm_reply');
-        $followGateEnabled = $triggerValue === 'comment'
-            && $goalValue !== 'comment_public'
-            && (bool) ($d['follow_gate_enabled'] ?? AppSetting::getValue('follow_gate_enabled', true))
-            && trim((string) ($d['private_reply'] ?? '')) !== '';
+        $triggers = ! empty($d['triggers_submitted'])
+            ? $this->resolveTriggers($d)
+            : $automation->triggerValues();
+        if ($triggers === []) {
+            return back()
+                ->withErrors(['triggers' => 'حداقل یک محرک را انتخاب کن.'])
+                ->withInput();
+        }
+        $primaryTrigger = $triggers[0];
+        $multiTrigger = count($triggers) > 1;
+        $goalValue = $primaryTrigger === 'comment'
+            ? ($d['goal'] ?? data_get($automation->settings, 'goal', 'comment_dm'))
+            : null;
+        $gateMessage = trim((string) (($d['private_reply'] ?? '') !== '' ? $d['private_reply'] : ($d['dm_message'] ?? '')));
+        if ($gateMessage === '') {
+            $existingMessage = $automation->actions
+                ->first(fn ($action) => in_array($action->action, ['private_reply', 'direct_message'], true));
+            $gateMessage = trim((string) ($existingMessage?->config['message'] ?? ''));
+        }
+        $followGateEnabled = $gateMessage !== ''
+            && $this->willSendDirectMessage($triggers, $goalValue)
+            && (bool) ($d['follow_gate_enabled'] ?? data_get($automation->settings, 'followGateEnabled', AppSetting::getValue('follow_gate_enabled', true)));
+        $unknownAudience = ($d['audience_unknown'] ?? data_get($automation->audience, 'whenUnknown', 'send')) === 'verify'
+            ? 'send'
+            : ($d['audience_unknown'] ?? data_get($automation->audience, 'whenUnknown', 'send'));
 
         $automation->update([
             'name' => $d['name'],
             'description' => $d['description'] ?? null,
             'status' => $d['status'],
             'priority' => $d['priority'],
-            'execution_mode' => in_array($triggerValue, ['comment', 'story_reply'], true) ? 'zernio' : $d['execution_mode'],
+            'trigger' => $primaryTrigger,
+            'triggers' => $triggers,
+            'execution_mode' => $this->executionModeFor($triggers),
+            'target_type' => $multiTrigger ? null : $automation->target_type,
+            'target_id' => $multiTrigger ? null : $automation->target_id,
             'cooldown_seconds' => $d['cooldown_seconds'],
             'max_per_user_day' => $d['max_per_user_day'] ?? null,
             'business_hours_only' => (bool) ($d['business_hours_only'] ?? false),
@@ -655,10 +698,11 @@ class PanelController extends Controller
             'match_mode' => in_array($matchMode, ['any', 'all'], true) ? $matchMode : 'any',
             'audience' => array_merge($automation->audience ?? [], [
                 'followerStatus' => $followGateEnabled ? 'follower' : ($d['audience_follower_status'] ?? data_get($automation->audience, 'followerStatus', 'any')),
-                'whenUnknown' => $followGateEnabled ? 'verify' : ($d['audience_unknown'] ?? data_get($automation->audience, 'whenUnknown', 'send')),
+                'whenUnknown' => $followGateEnabled ? 'verify' : $unknownAudience,
                 'minFollowerCount' => $d['min_follower_count'] ?? data_get($automation->audience, 'minFollowerCount'),
             ]),
             'settings' => array_merge($automation->settings ?? [], [
+                'goal' => $goalValue,
                 'matchMode' => $matchMode,
                 'alsoMatchInDms' => (bool) ($d['also_match_in_dms'] ?? data_get($automation->settings, 'alsoMatchInDms', false)),
                 'dmDelaySeconds' => (int) ($d['dm_delay_seconds'] ?? data_get($automation->settings, 'dmDelaySeconds', 0)),
@@ -679,6 +723,7 @@ class PanelController extends Controller
             $d['excluded_keywords'] ?? '',
             $matchMode
         );
+        $d['goal'] = $goalValue;
         $this->syncActions($automation, $d);
 
         $automation->load(['keywords', 'actions', 'account']);
@@ -710,8 +755,7 @@ class PanelController extends Controller
         ]);
 
         $automation->refresh();
-        $triggerValue = $automation->trigger instanceof \BackedEnum ? $automation->trigger->value : (string) $automation->trigger;
-        if (in_array($triggerValue, ['comment', 'story_reply'], true)) {
+        if ($automation->supportsNativeSync()) {
             try {
                 $automation->load(['keywords', 'actions', 'account']);
                 $response = $nativeSync->sync($automation);
@@ -1514,8 +1558,19 @@ class PanelController extends Controller
 
     private function syncNativeAutomation(Automation $automation): void
     {
-        $triggerValue = $automation->trigger instanceof \BackedEnum ? $automation->trigger->value : (string) $automation->trigger;
-        if (! in_array($triggerValue, ['comment', 'story_reply'], true)) {
+        // A multi-trigger automation runs entirely in the local engine. If it
+        // used to be native, pause the remote copy so comments are not answered
+        // twice.
+        if (! $automation->supportsNativeSync()) {
+            if ($automation->zernio_automation_id) {
+                try {
+                    app(ZernioAutomationSync::class)->disable($automation);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+                $automation->forceFill(['zernio_automation_id' => null])->save();
+            }
+
             return;
         }
 
@@ -1536,6 +1591,55 @@ class PanelController extends Controller
             $automation->update(['status' => 'paused']);
             session()->flash('warning', 'اتوماسیون ذخیره شد اما فعال نشد؛ اتصال حساب یا تنظیمات ارسال را بررسی کنید.');
         }
+    }
+
+    /** @return list<string> */
+    private function resolveTriggers(array $data): array
+    {
+        $input = is_array($data['triggers'] ?? null) ? $data['triggers'] : [];
+        $triggers = $this->normalizeTriggers($input);
+
+        // Backwards compatible with the old single radio field.
+        if ($triggers === [] && ! empty($data['trigger'])) {
+            $triggers = $this->normalizeTriggers([$data['trigger']]);
+        }
+
+        return $triggers;
+    }
+
+    /** @return list<string> */
+    private function normalizeTriggers(array $input): array
+    {
+        $order = array_flip(Automation::TRIGGERS);
+        $selected = [];
+
+        foreach ($input as $value) {
+            $value = is_scalar($value) ? (string) $value : '';
+            if (isset($order[$value])) {
+                $selected[$value] = true;
+            }
+        }
+
+        $selected = array_keys($selected);
+        usort($selected, static fn (string $a, string $b): int => $order[$a] <=> $order[$b]);
+
+        return $selected;
+    }
+
+    private function willSendDirectMessage(array $triggers, ?string $goal): bool
+    {
+        return in_array('story_reply', $triggers, true)
+            || in_array('direct_message', $triggers, true)
+            || (in_array('comment', $triggers, true) && $goal !== 'comment_public');
+    }
+
+    private function executionModeFor(array $triggers): string
+    {
+        // Zernio's native comment automations accept one trigger; everything
+        // with several triggers (or a DM trigger) runs in the local engine.
+        return count($triggers) === 1 && in_array($triggers[0], ['comment', 'story_reply'], true)
+            ? 'zernio'
+            : 'local';
     }
 
     private function syncKeywords(Automation $automation, string $keywords, string $excluded, string $matchMode): void
@@ -1564,27 +1668,18 @@ class PanelController extends Controller
     {
         $automation->actions()->delete();
         $order = 0;
-        $trigger = $automation->trigger->value ?? $automation->trigger;
+        $triggers = $automation->triggerValues();
+        $hasComment = in_array('comment', $triggers, true);
+        $conversationTriggers = array_values(array_intersect($triggers, ['story_reply', 'direct_message']));
+        $goal = $data['goal'] ?? data_get($automation->settings, 'goal', $hasComment ? 'comment_dm' : 'dm_reply');
 
         $publicReply = trim((string) ($data['public_reply'] ?? ''));
-        if ($publicReply !== '') {
+        if ($publicReply !== '' && $hasComment) {
             $automation->actions()->create([
                 'action' => 'public_reply',
                 'sort_order' => $order++,
-                'config' => ['message' => $publicReply],
+                'config' => ['message' => $publicReply, 'triggers' => ['comment']],
             ]);
-        }
-
-        $goal = $data['goal'] ?? null;
-        $message = '';
-        $privateAction = false;
-        if ($trigger === 'comment') {
-            if ($goal !== 'comment_public') {
-                $message = trim((string) ($data['private_reply'] ?? $data['dm_message'] ?? ''));
-                $privateAction = true;
-            }
-        } else {
-            $message = trim((string) ($data['dm_message'] ?? ''));
         }
 
         $quickReplies = $this->decodeJsonList($data['quick_replies_json'] ?? '');
@@ -1598,29 +1693,71 @@ class PanelController extends Controller
         if (!empty($data['message_tag'])) $extras['messageTag'] = $data['message_tag'];
         if (array_key_exists('link_preview', $data)) $extras['linkPreview'] = (bool) $data['link_preview'];
 
-        $sequence = $this->decodeJsonList($data['dm_sequence_json'] ?? '');
+        $message = trim((string) ($data['private_reply'] ?? ''));
+        $dmMessage = trim((string) ($data['dm_message'] ?? ''));
+        if ($message === '') $message = $dmMessage;
+        if ($dmMessage === '') $dmMessage = $message;
 
-        if ($trigger !== 'comment' && $sequence) {
-            $sequence = array_slice($sequence, 0, 20);
-            foreach ($sequence as $item) {
-                if (!is_array($item)) continue;
-                $type = (string) ($item['type'] ?? '');
-                $text = trim((string) ($item['message'] ?? ''));
-                $url = trim((string) ($item['attachmentUrl'] ?? ''));
-                if (!in_array($type, ['text', 'media'], true)) continue;
-                if ($type === 'text' && $text === '') continue;
-                if ($type === 'media' && $url === '') continue;
+        // 1) The comment itself is answered through a private reply.
+        if ($hasComment && $goal !== 'comment_public' && $message !== '') {
+            $config = $extras;
+            $config['message'] = $message;
+            $config['triggers'] = ['comment'];
 
+            $automation->actions()->create([
+                'action' => 'private_reply',
+                'sort_order' => $order++,
+                'config' => $config,
+            ]);
+        }
+
+        // 2) Story replies and DMs share the conversation-based action.
+        if ($conversationTriggers !== []) {
+            $sequence = $this->decodeJsonList($data['dm_sequence_json'] ?? '');
+
+            if ($sequence) {
+                $sequence = array_slice($sequence, 0, 20);
+                foreach ($sequence as $item) {
+                    if (!is_array($item)) continue;
+                    $type = (string) ($item['type'] ?? '');
+                    $text = trim((string) ($item['message'] ?? ''));
+                    $url = trim((string) ($item['attachmentUrl'] ?? ''));
+                    if (!in_array($type, ['text', 'media'], true)) continue;
+                    if ($type === 'text' && $text === '') continue;
+                    if ($type === 'media' && $url === '') continue;
+
+                    $config = $extras;
+                    if ($text !== '') $config['message'] = $text;
+                    if ($url !== '') {
+                        $attachmentType = strtolower((string) ($item['attachmentType'] ?? 'file'));
+                        $config['attachmentUrl'] = $url;
+                        $config['attachmentType'] = in_array($attachmentType, ['image','video','audio','file'], true) ? $attachmentType : 'file';
+                        if (!empty($item['attachmentName'])) $config['attachmentName'] = $item['attachmentName'];
+                    }
+
+                    if ($config !== []) {
+                        $config['triggers'] = $conversationTriggers;
+                        $automation->actions()->create([
+                            'action' => 'direct_message',
+                            'sort_order' => $order++,
+                            'config' => $config,
+                        ]);
+                    }
+                }
+            } else {
+                $attachmentUrl = trim((string) ($data['dm_attachment_url'] ?? ''));
+                $attachmentType = strtolower(trim((string) ($data['dm_attachment_type'] ?? '')));
+                $attachmentName = trim((string) ($data['dm_attachment_name'] ?? ''));
                 $config = $extras;
-                if ($text !== '') $config['message'] = $text;
-                if ($url !== '') {
-                    $attachmentType = strtolower((string) ($item['attachmentType'] ?? 'file'));
-                    $config['attachmentUrl'] = $url;
+                if ($dmMessage !== '') $config['message'] = $dmMessage;
+                if ($attachmentUrl !== '') {
+                    $config['attachmentUrl'] = $attachmentUrl;
                     $config['attachmentType'] = in_array($attachmentType, ['image','video','audio','file'], true) ? $attachmentType : 'file';
-                    if (!empty($item['attachmentName'])) $config['attachmentName'] = $item['attachmentName'];
+                    if ($attachmentName !== '') $config['attachmentName'] = $attachmentName;
                 }
 
                 if ($config !== []) {
+                    $config['triggers'] = $conversationTriggers;
                     $automation->actions()->create([
                         'action' => 'direct_message',
                         'sort_order' => $order++,
@@ -1628,33 +1765,13 @@ class PanelController extends Controller
                     ]);
                 }
             }
-        } else {
-            $attachmentUrl = trim((string) ($data['dm_attachment_url'] ?? ''));
-            $attachmentType = strtolower(trim((string) ($data['dm_attachment_type'] ?? '')));
-            $attachmentName = trim((string) ($data['dm_attachment_name'] ?? ''));
-            $config = $extras;
-            if ($message !== '') $config['message'] = $message;
-            if ($attachmentUrl !== '' && $trigger !== 'comment') {
-                $config['attachmentUrl'] = $attachmentUrl;
-                $config['attachmentType'] = in_array($attachmentType, ['image','video','audio','file'], true) ? $attachmentType : 'file';
-                if ($attachmentName !== '') $config['attachmentName'] = $attachmentName;
-            }
-
-            $actionType = $trigger === 'comment' ? ($privateAction ? 'private_reply' : null) : 'direct_message';
-            if ($actionType && $config !== []) {
-                $automation->actions()->create([
-                    'action' => $actionType,
-                    'sort_order' => $order++,
-                    'config' => $config,
-                ]);
-            }
         }
 
-        if (!empty($data['hide_comment'])) {
+        if (!empty($data['hide_comment']) && $hasComment) {
             $automation->actions()->create([
                 'action' => 'hide_comment',
                 'sort_order' => $order++,
-                'config' => [],
+                'config' => ['triggers' => ['comment']],
             ]);
         }
 

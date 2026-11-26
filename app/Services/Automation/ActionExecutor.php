@@ -14,19 +14,19 @@ class ActionExecutor {
  public function __construct(private ZernioClient $zernio, private TemplateRenderer $renderer) {}
  public function execute(Automation $a,array $action,array $context):array { $type=AutomationAction::tryFrom($action['action']??'');$cfg=$action['config']??[];if(!$type)return ['action'=>$action['action']??null,'status'=>'skipped','reason'=>'unknown_action'];$message=$this->renderer->render($cfg['message']??'',$context);try{return match($type){AutomationAction::PublicReply=>$this->publicReply($a,$context,$message),AutomationAction::PrivateReply=>$this->privateReply($a,$context,$message,$cfg),AutomationAction::DirectMessage=>$this->directMessage($a,$context,$message,$cfg),AutomationAction::HideComment=>$this->hide($a,$context),AutomationAction::AddTag=>$this->addTag($a,$context,$cfg)};}catch(\Throwable $e){return ['action'=>$type->value,'status'=>'failed','error'=>$e->getMessage()];} }
  private function publicReply(Automation $a,array $c,string $m):array {if(!$m||empty($c['post_id'])||empty($c['comment_id']))return ['action'=>'public_reply','status'=>'skipped','reason'=>'missing_data'];$r=$this->zernio->replyToComment($c['post_id'],$c['comment_id'],$a->account->zernio_account_id,$m);return ['action'=>'public_reply','status'=>'sent','response'=>$r];}
- private function privateReply(Automation $a,array $c,string $m,array $cfg):array {if(!$m||empty($c['post_id'])||empty($c['comment_id']))return ['action'=>'private_reply','status'=>'skipped','reason'=>'missing_data'];$body=['message'=>$m];if(!empty($cfg['buttons']))$body['buttons']=$cfg['buttons'];elseif(!empty($cfg['quickReplies']))$body['quickReplies']=$cfg['quickReplies'];$r=$this->zernio->privateReply($c['post_id'],$c['comment_id'],$a->account->zernio_account_id,$body);return ['action'=>'private_reply','status'=>'sent','response'=>$r];}
+ private function privateReply(Automation $a,array $c,string $m,array $cfg):array {
+  if(!$m||empty($c['conversation_id'])&&(empty($c['post_id'])||empty($c['comment_id'])))return ['action'=>'private_reply','status'=>'skipped','reason'=>'missing_data'];
+  // The follow gate always runs before the real answer, for every trigger.
+  if($this->followGateHold($a,$c))return ['action'=>'private_reply','status'=>'waiting_follow','reason'=>'follow_required'];
+  $body=['message'=>$m];if(!empty($cfg['buttons']))$body['buttons']=$cfg['buttons'];elseif(!empty($cfg['quickReplies']))$body['quickReplies']=$cfg['quickReplies'];
+  // After the gate is confirmed a conversation exists: send normally instead of
+  // consuming the comment's single private-reply allowance twice.
+  if(!empty($c['conversation_id'])){$r=$this->zernio->sendMessage($c['conversation_id'],$a->account->zernio_account_id,$body,(string)Str::uuid());}
+  else{$r=$this->zernio->privateReply($c['post_id'],$c['comment_id'],$a->account->zernio_account_id,$body);}
+  return ['action'=>'private_reply','status'=>'sent','response'=>$r];
+ }
  private function directMessage(Automation $a,array $c,string $m,array $cfg):array {
-  if (empty($c['follow_gate_bypass']) && !empty($c['user_id']) && FollowGate::enabled($a) && !FollowGate::targetsNonFollowers($a)) {
-    $status = $this->resolveFollowerStatus($a, $c);
-    if ($status !== true) {
-      // Never nag: the gate-only path may already have sent the prompt today.
-      if (!$this->hasRecentFollowGatePrompt($a, $c)) {
-        $token=$this->storeFollowGatePending($a, $c);
-        $this->sendFollowGate($a, $c, $token, $status);
-      }
-      return ['action'=>'direct_message','status'=>'waiting_follow','reason'=>'follow_required'];
-    }
-  }
+  if($this->followGateHold($a,$c))return ['action'=>'direct_message','status'=>'waiting_follow','reason'=>'follow_required'];
 
   $hasAttachment = !empty($cfg['attachmentUrl']);
   $hasInteractive = !empty($cfg['template']) || !empty($cfg['buttons']) || !empty($cfg['quickReplies']);
@@ -49,7 +49,8 @@ class ActionExecutor {
   * Returns true when a prompt was actually sent (the main DM stays pending).
   */
  public function enforceFollowGate(Automation $a,array $c):bool {
-  if (empty($c['user_id']) || empty($c['conversation_id'])) return false;
+  if (empty($c['user_id'])) return false;
+  if (empty($c['conversation_id']) && (empty($c['post_id']) || empty($c['comment_id']))) return false;
   if (! FollowGate::enabled($a) || FollowGate::targetsNonFollowers($a)) return false;
   $status = $this->resolveFollowerStatus($a, $c);
   if ($status === true) return false;
@@ -58,6 +59,23 @@ class ActionExecutor {
   if ($this->hasRecentFollowGatePrompt($a, $c, $contact)) return false;
   $token = $this->storeFollowGatePending($a, $c);
   $this->sendFollowGate($a, $c, $token, $status);
+  return true;
+ }
+ /**
+  * Hold a real message until the contact follows the page.
+  *
+  * Returns true when the main action must stop; the prompt is sent at most
+  * once per contact/automation/day and reused by the postback handler.
+  */
+ private function followGateHold(Automation $a,array $c):bool {
+  if (!empty($c['follow_gate_bypass']) || empty($c['user_id'])) return false;
+  if (! FollowGate::enabled($a) || FollowGate::targetsNonFollowers($a)) return false;
+  $status = $this->resolveFollowerStatus($a, $c);
+  if ($status === true) return false;
+  if (!$this->hasRecentFollowGatePrompt($a, $c)) {
+   $token = $this->storeFollowGatePending($a, $c);
+   $this->sendFollowGate($a, $c, $token, $status);
+  }
   return true;
  }
  /**
@@ -112,8 +130,13 @@ class ActionExecutor {
   $message=$status === false ? $gate['notFollowingMessage'] : $gate['unknownMessage'];
   $label=$gate['buttonLabel'];
   $button=[['type'=>'postback','title'=>mb_substr($label,0,20),'payload'=>'follow_gate:'.(string)$token]];
+  $body=['message'=>$message,'buttons'=>$button];
   if (!empty($c['conversation_id'])) {
-    $this->zernio->sendMessage($c['conversation_id'],$a->account->zernio_account_id,['message'=>$message,'buttons'=>$button],(string)Str::uuid());
+    $this->zernio->sendMessage($c['conversation_id'],$a->account->zernio_account_id,$body,(string)Str::uuid());
+  } elseif (!empty($c['post_id']) && !empty($c['comment_id'])) {
+    // Comments usually have no conversation yet; the prompt itself opens the
+    // DM thread and its postback brings the conversation id back.
+    $this->zernio->privateReply($c['post_id'],$c['comment_id'],$a->account->zernio_account_id,$body);
   }
  }
 

@@ -31,9 +31,10 @@ final class FollowGate
     {
         $settings = is_array($a->settings) ? $a->settings : [];
 
-        // Only comment automations persist a per-automation gate flag; for
-        // story replies the stored value is always false and not authoritative.
-        if (self::trigger($a) === 'comment' && array_key_exists('followGateEnabled', $settings)) {
+        // Only comment (or multi-trigger) automations persist an authoritative
+        // per-automation gate flag; for single story replies the stored value is
+        // always false and not authoritative.
+        if ((self::trigger($a) === 'comment' || $a->hasMultipleTriggers()) && array_key_exists('followGateEnabled', $settings)) {
             return self::toBool($settings['followGateEnabled']);
         }
 
@@ -67,9 +68,10 @@ final class FollowGate
     public static function config(Automation $a): array
     {
         $settings = is_array($a->settings) ? $a->settings : [];
-        // The per-automation gate copy is only editable for comment automations;
-        // other triggers follow the global settings so edits apply everywhere.
-        $local = self::trigger($a) === 'comment' && is_array($settings['followGate'] ?? null)
+        // The per-automation gate copy is only editable for comment (or
+        // multi-trigger) automations; other triggers follow the global settings
+        // so edits apply everywhere.
+        $local = (self::trigger($a) === 'comment' || $a->hasMultipleTriggers()) && is_array($settings['followGate'] ?? null)
             ? $settings['followGate']
             : [];
 

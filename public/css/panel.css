@@ -609,6 +609,16 @@ input:not([type=checkbox]):not([type=radio]):focus-visible,textarea:focus-visibl
 }
 .choice-card strong{display:block;font-size:13.5px;font-weight:800}
 .choice-card small{display:block;color:var(--muted);font-size:12px;margin-top:2px;line-height:1.7}
+/* Multi-trigger selector (checkbox pills) */
+.trigger-check-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.trigger-check{
+  display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid var(--line);
+  border-radius:12px;background:var(--surface-2);cursor:pointer;font-size:12.5px;font-weight:700;
+  color:var(--muted);transition:border-color .18s ease,background .18s ease,color .18s ease;
+}
+.trigger-check:hover{border-color:var(--line-strong);color:var(--ink)}
+.trigger-check input{width:15px;height:15px;margin:0;accent-color:var(--accent)}
+.trigger-check:has(input:checked){border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
 .goal-card{
   margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:17px;background:var(--surface-2);
   display:grid;grid-template-columns:.7fr 1.3fr;gap:12px;align-items:center;

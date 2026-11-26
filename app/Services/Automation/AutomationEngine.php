@@ -11,8 +11,15 @@ class AutomationEngine {
  public function __construct(private KeywordMatcher $matcher, private BusinessHours $hours, private RateLimiter $limiter) {}
  public function evaluate(Automation $a,string $text,array $context=[]):array {
   $keyword=$this->matcher->match($a,$text);
-  $targetOk=true; if($a->target_id){$key=$a->target_type==='story'?'story_id':($a->target_type==='post'?'post_id':null);$targetOk=$key?(($context[$key]??null)===$a->target_id):(($context['target_id']??null)===$a->target_id);}
-  $triggerOk=($context['trigger']??null)===($a->trigger?->value ?? $a->trigger);
+  $trigger=(string)($context['trigger']??'');
+  // A multi-trigger automation answers every selected event type, and a
+  // post/story target only applies when that same event arrives.
+  $targetOk=true;
+  if($a->target_id && !$a->hasMultipleTriggers() && in_array($trigger,['comment','story_reply'],true)){
+   $key=$a->target_type==='story'?'story_id':'post_id';
+   $targetOk=((string)($context[$key]??$context['target_id']??'')===(string)$a->target_id);
+  }
+  $triggerOk=in_array($trigger,$a->triggerValues(),true);
   $aud=$this->audience($a,$context);
   $global=(bool)AppSetting::getValue('automation_global_enabled',true) && $a->global_enabled;
   $business=!$a->business_hours_only || $this->hours->allowed();
@@ -26,7 +33,9 @@ class AutomationEngine {
   if(!FollowGate::enabled($a))return false;
   if(!FollowGate::withoutKeywordsEnabled())return false;
   $a->loadMissing('actions');
-  return $a->actions->contains(static fn($action):bool=>$action->action==='direct_message');
+  // Any action that can deliver a direct message is a candidate for the
+  // keyword-less follow prompt.
+  return $a->actions->contains(static fn($action):bool=>in_array($action->action,['direct_message','private_reply'],true));
  }
  private function audience(Automation $a,array $c):array {
   $cfg=$a->audience??[];

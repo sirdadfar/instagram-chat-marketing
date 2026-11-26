@@ -26,13 +26,15 @@
 <div class="automation-grid" data-automation-grid>
 @forelse($automations as $a)
     @php
-        $trigger = $a->trigger instanceof \BackedEnum ? $a->trigger->value : (string)$a->trigger;
+        $trigger = $a->primaryTrigger();
+        $triggerValues = $a->triggerValues();
+        $triggerText = collect($triggerValues)->map(fn($value)=>$triggerLabels[$value] ?? $value)->implode(' + ');
         $status = (string)$a->status;
         $actions = $a->actions->count();
         $target = $a->target_id ? ($a->target_type === 'story' ? 'یک استوری' : 'یک پست') : 'همه محتواها';
         $goalIcon = $trigger==='comment' ? '◎' : ($trigger==='story_reply' ? '◌' : '↗');
     @endphp
-    <article class="automation-card automation-card-premium" data-automation-card data-status="{{ $status }}" data-search="{{ Str::lower($a->name.' '.($a->account?->username ?? '').' '.$triggerLabels[$trigger]) }}">
+    <article class="automation-card automation-card-premium" data-automation-card data-status="{{ $status }}" data-search="{{ Str::lower($a->name.' '.($a->account?->username ?? '').' '.$triggerText) }}">
         <div class="automation-accent automation-accent-{{ $trigger }}"></div>
         <div class="automation-card-top">
             <div class="automation-title"><div class="flow-avatar large">{{ $goalIcon }}</div><div><strong>{{ $a->name }}</strong><span>{{ $a->account?->username ? '@'.$a->account->username : 'حساب اینستاگرام' }}</span></div></div>
@@ -45,7 +47,7 @@
         </div>
 
         <div class="automation-flow-preview">
-            <div class="flow-node"><span>۱</span><div><strong>{{ $triggerLabels[$trigger] ?? $trigger }}</strong><small>شروع</small></div></div>
+            <div class="flow-node"><span>۱</span><div><strong>{{ $triggerText }}</strong><small>شروع</small></div></div>
             <div class="flow-line"></div>
             <div class="flow-node"><span>۲</span><div><strong>{{ $target }}</strong><small>دامنه</small></div></div>
             <div class="flow-line"></div>

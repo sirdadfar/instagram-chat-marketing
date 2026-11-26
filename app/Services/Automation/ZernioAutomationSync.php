@@ -17,11 +17,17 @@ final class ZernioAutomationSync
 
     public function supports(Automation $automation): bool
     {
-        $trigger = $automation->trigger instanceof \BackedEnum
-            ? $automation->trigger->value
-            : (string) $automation->trigger;
+        return $automation->supportsNativeSync();
+    }
 
-        return in_array($trigger, ['comment', 'story_reply'], true);
+    /** Pause the remote copy of an automation that moved to the local engine. */
+    public function disable(Automation $automation): array
+    {
+        if (! $automation->zernio_automation_id) {
+            return [];
+        }
+
+        return $this->client->updateCommentAutomation($automation->zernio_automation_id, ['isActive' => false]);
     }
 
     public function sync(Automation $automation): array
@@ -32,9 +38,9 @@ final class ZernioAutomationSync
             throw new \RuntimeException('این نوع اتوماسیون از مسیر بومی پشتیبانی نمی‌شود.');
         }
 
-        $trigger = $automation->trigger instanceof \BackedEnum
-            ? $automation->trigger->value
-            : (string) $automation->trigger;
+        // Native comment automations accept exactly one trigger, and only a
+        // single-trigger automation can reach this point.
+        $trigger = $automation->primaryTrigger();
         $settings = is_array($automation->settings) ? $automation->settings : [];
 
         $keywords = $automation->keywords

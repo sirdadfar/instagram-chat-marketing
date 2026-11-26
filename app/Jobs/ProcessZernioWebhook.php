@@ -35,7 +35,15 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
     $event->update(['status'=>'processed','processed_at'=>now()]); return;
    }
   }
-  $automations=Automation::with(['keywords','actions','account'])->where('instagram_account_id',$account->id)->where('status','active')->orderBy('priority')->get();foreach($automations as $a){if($a->execution_mode!=='local')continue;$target=$data['trigger']==='story_reply'?($data['story_id']??null):($data['post_id']??null);$context=$data+['target_id'=>$target,'event_id'=>$event->event_id];$eval=$engine->evaluate($a,$data['text']??'',$context);if(!$eval['pass']){$engine->log($a,$context,$eval,'not_matched');continue;}if(!empty($eval['gate_only'])){$gated=$executor->enforceFollowGate($a,$context);$engine->log($a,$context,$eval,$gated?'gated':'not_matched');if($gated)break;continue;}[$allowed,$reason]=$engine->canRun($a,$data['user_id']??null);if(!$allowed){$engine->log($a,$context,$eval,'blocked',$reason);continue;}$run=AutomationRun::create(['automation_id'=>$a->id,'event_id'=>$event->event_id,'status'=>'running','context'=>$context,'started_at'=>now()]);$results=[];foreach($a->actions->sortBy('sort_order') as $action){
+  $automations=Automation::with(['keywords','actions','account'])->where('instagram_account_id',$account->id)->where('status','active')->orderBy('priority')->get();
+  $trigger=(string)($data['trigger']??'');
+  foreach($automations as $a){
+   if($a->execution_mode!=='local')continue;
+   // Multi-trigger automations are handled locally for every selected event.
+   if(!$a->hasTrigger($trigger))continue;
+   $actions=$a->actionsForTrigger($trigger);
+   if($actions->isEmpty())continue;
+   $target=$data['trigger']==='story_reply'?($data['story_id']??null):($data['post_id']??null);$context=$data+['target_id'=>$target,'event_id'=>$event->event_id];$eval=$engine->evaluate($a,$data['text']??'',$context);if(!$eval['pass']){$engine->log($a,$context,$eval,'not_matched');continue;}if(!empty($eval['gate_only'])){$gated=$executor->enforceFollowGate($a,$context);$engine->log($a,$context,$eval,$gated?'gated':'not_matched');if($gated)break;continue;}[$allowed,$reason]=$engine->canRun($a,$data['user_id']??null);if(!$allowed){$engine->log($a,$context,$eval,'blocked',$reason);continue;}$run=AutomationRun::create(['automation_id'=>$a->id,'event_id'=>$event->event_id,'status'=>'running','context'=>$context,'started_at'=>now()]);$results=[];foreach($actions as $action){
     $result=$executor->execute($a,$action->toArray(),$context); $results[]=$result;
     if(($result['status']??null)==='waiting_follow') break;
   }
@@ -84,11 +92,19 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   }
   if(!$automation||$automation->status!=='active') return true;
   $context=is_array($pending['context']??null)?$pending['context']:[];
+  $originalTrigger=(string)($context['trigger']??'');
+  // The postback carries the live conversation/user data; the stored context
+  // only holds the original event (which may have no conversation yet).
+  $context=array_merge($context,$data);
+  if($originalTrigger!=='')$context['trigger']=$originalTrigger;
   $context['follow_gate_bypass']=true; $context['instagram_profile']['isFollower']=true;
+  $trigger=(string)($context['trigger']??'');
+  $actions=$automation->actionsForTrigger($trigger);
+  if($actions->isEmpty())return true;
   [$allowed,$reason]=$engine->canRun($automation,$data['user_id']??null);
   if(!$allowed){$engine->log($automation,$context,['keywords'=>['pass'=>true]],'blocked',$reason);return true;}
   $results=[];
-  foreach($automation->actions->sortBy('sort_order') as $action){$result=$executor->execute($automation,$action->toArray(),$context);$results[]=$result;if(($result['status']??null)==='waiting_follow')break;}
+  foreach($actions as $action){$result=$executor->execute($automation,$action->toArray(),$context);$results[]=$result;if(($result['status']??null)==='waiting_follow')break;}
   if(!collect($results)->contains(fn($r)=>($r['status']??null)==='waiting_follow')){
     $failedAction=collect($results)->first(fn($r)=>($r['status']??null)==='failed');
     if(!$failedAction)$engine->markRun($automation,$data['user_id']??null);

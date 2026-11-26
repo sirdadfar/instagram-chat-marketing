@@ -17,7 +17,7 @@
 <div class="dashboard-grid dashboard-grid-premium">
 <section class="panel-card dashboard-section"><div class="section-head"><div><div class="eyebrow">گردش‌کارها</div><h2>اتوماسیون‌های اخیر</h2></div><a class="text-action" href="{{ route('automations.index') }}">همه <span>←</span></a></div><div class="dashboard-automation-list">
 @forelse($automations as $a)
-@php($tr=$a->trigger instanceof \BackedEnum?$a->trigger->value:(string)$a->trigger)
+@php($tr=$a->primaryTrigger())
 <div class="dashboard-automation-row"><div class="row-avatar">{{ $tr==='comment'?'◎':($tr==='story_reply'?'◌':'↗') }}</div><div class="row-main"><strong>{{ $a->name }}</strong><small>{{ $a->account?->username ? '@'.$a->account->username : 'حساب' }} • اولویت {{ $a->priority }}</small></div><span class="status-badge {{ $a->status }}"><i></i>{{ $statusLabels[$a->status] ?? $a->status }}</span><div class="row-actions"><a class="quick-icon" href="{{ route('automations.edit',$a) }}">✎</a><button type="button" class="quick-icon" data-confirm-form="dashboard-delete-{{ $a->id }}">×</button><form id="dashboard-delete-{{ $a->id }}" method="POST" action="{{ route('automations.destroy',$a) }}" hidden>@csrf @method('DELETE')</form></div></div>
 @empty<div class="empty-state"><div class="empty-icon">✦</div><strong>هنوز اتوماسیونی نداری</strong><p>از یک الگوی ساده شروع کن.</p></div>@endforelse
 </div></section>

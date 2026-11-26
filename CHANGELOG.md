@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Multi-trigger automations: one rule can listen to comments, story replies and
+  direct messages at the same time, with trigger-scoped actions so each event is
+  answered once and the follow gate runs before every selected trigger.
 - Open-source packaging: MIT license, contributing guide, code of conduct,
   security policy, CI workflow and a PHPUnit test suite.
 - Connected pages can be removed from Settings; the page is disconnected from
