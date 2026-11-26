@@ -8,6 +8,7 @@ use App\Models\InstagramAccount;
 use App\Models\InstagramPost;
 use App\Models\InstagramStory;
 use App\Services\Zernio\ZernioClient;
+use App\Support\InstagramMedia;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -20,6 +21,7 @@ class ContentController extends Controller
         $selected = $accounts->firstWhere('id', (int) $request->integer('account_id')) ?? $accounts->first();
         $posts = collect(); $stories = collect(); $notice = null;
         if ($selected) {
+            $client->forUser($selected->user);
             try { $posts = $this->normalisePosts($client->listInstagramPosts($selected->zernio_account_id, ['limit' => 30])); }
             catch (\Throwable $e) { report($e); $notice = 'بارگذاری فهرست محتوا انجام نشد.'; }
             try { $stories = $this->normaliseStories($client->listInstagramStories($selected->zernio_account_id, ['limit' => 30])); }
@@ -68,6 +70,7 @@ class ContentController extends Controller
         ]);
 
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $client->forUser($account->user);
         $mediaItems = json_decode($data['media_items_json'], true);
         if (!is_array($mediaItems) || $mediaItems === []) return back()->withErrors(['media_items_json' => 'حداقل یک رسانه انتخاب کنید.'])->withInput();
 
@@ -152,6 +155,7 @@ class ContentController extends Controller
     {
         $id = $request->validate(['post_id'=>['required','string','max:255'],'account_id'=>['required','integer','exists:instagram_accounts,id']]);
         $account = Tenancy::accounts()->whereKey($id['account_id'])->where('status','active')->firstOrFail();
+        $client->forUser($account->user);
         try { $client->deletePost($id['post_id']); return back()->with('success','محتوا حذف یا لغو شد.'); }
         catch (\Throwable $e) { report($e); return back()->withErrors(['content'=>'حذف محتوا انجام نشد.']); }
     }
@@ -163,6 +167,7 @@ class ContentController extends Controller
             'limit' => ['nullable','integer','min:1','max:100'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $client->forUser($account->user);
         try {
             $result = $client->listInstagramAudio($account->zernio_account_id, ['limit' => $data['limit'] ?? 30]);
             $items = data_get($result, 'audio', data_get($result, 'audios', data_get($result, 'data.audio', data_get($result, 'data.audios', []))));
@@ -187,6 +192,7 @@ class ContentController extends Controller
             'post_id'=>['required','string','max:255'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $client->forUser($account->user);
         try {
             return response()->json(['ok'=>true,'data'=>$client->likePost($data['post_id'], $account->zernio_account_id)]);
         } catch (\Throwable $e) {
@@ -202,6 +208,7 @@ class ContentController extends Controller
             'post_id'=>['required','string','max:255'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $client->forUser($account->user);
         try {
             return response()->json(['ok'=>true,'data'=>$client->unlikePost($data['post_id'], $account->zernio_account_id)]);
         } catch (\Throwable $e) {
@@ -219,6 +226,7 @@ class ContentController extends Controller
             'to_date'=>['nullable','date'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $client->forUser($account->user);
         $query = [];
         if (!empty($data['from_date'])) $query['fromDate'] = $data['from_date'];
         if (!empty($data['to_date'])) $query['toDate'] = $data['to_date'];
@@ -234,35 +242,34 @@ class ContentController extends Controller
     {
         $data = $request->validate(['account_id'=>['required','integer','exists:instagram_accounts,id'],'story_id'=>['required','string','max:255']]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $client->forUser($account->user);
         try { return response()->json(['ok'=>true,'data'=>$client->getStoryInsights($account->zernio_account_id, $data['story_id'])]); }
         catch (\Throwable $e) { report($e); return response()->json(['ok'=>false,'message'=>'آمار استوری در دسترس نیست.'],422); }
     }
 
     private function normalisePosts(array $response)
     {
-        $items = data_get($response,'posts',data_get($response,'data.posts',[]));
-        return collect(is_array($items) ? $items : [])->filter('is_array')->map(fn($p)=>[
-            'id'=>(string)($p['id'] ?? $p['platformPostId'] ?? $p['_id'] ?? ''),
-            'type'=>strtoupper((string)($p['mediaType'] ?? $p['mediaProductType'] ?? data_get($p,'mediaItems.0.type','IMAGE'))),
-            'image'=>$p['thumbnailUrl'] ?? data_get($p,'mediaItems.0.thumbnailUrl') ?? data_get($p,'mediaItems.0.url') ?? $p['mediaUrl'] ?? null,
-            'url'=>$p['permalink'] ?? $p['platformPostUrl'] ?? null,
-            'caption'=>(string)($p['caption'] ?? $p['content'] ?? ''),
-            'timestamp'=>$p['timestamp'] ?? $p['publishedAt'] ?? null,
-            'status'=>strtolower((string)($p['status'] ?? $p['state'] ?? ($p['publishedAt'] ? 'published' : 'draft'))),
-            'scheduledFor'=>$p['scheduledFor'] ?? $p['scheduled_for'] ?? null,
-        ])->filter(fn($p)=>$p['id']!=='')->values();
+        return InstagramMedia::posts($response)->map(fn (array $post): array => [
+            'id' => $post['id'],
+            'type' => $post['mediaType'],
+            'image' => $post['thumbnailUrl'] !== '' ? $post['thumbnailUrl'] : $post['mediaUrl'],
+            'url' => $post['permalink'] !== '' ? $post['permalink'] : null,
+            'caption' => $post['caption'],
+            'timestamp' => $post['timestamp'] !== '' ? $post['timestamp'] : null,
+            'status' => $post['status'],
+            'scheduledFor' => null,
+        ])->values();
     }
 
     private function normaliseStories(array $response)
     {
-        $items = data_get($response,'stories',data_get($response,'data.stories',[]));
-        return collect(is_array($items) ? $items : [])->filter('is_array')->map(fn($s)=>[
-            'id'=>(string)($s['id'] ?? $s['_id'] ?? ''),
-            'type'=>strtoupper((string)($s['mediaType'] ?? 'IMAGE')),
-            'image'=>$s['thumbnailUrl'] ?? $s['mediaUrl'] ?? null,
-            'url'=>$s['permalink'] ?? null,
-            'timestamp'=>$s['timestamp'] ?? null,
-        ])->filter(fn($s)=>$s['id']!=='')->values();
+        return InstagramMedia::stories($response)->map(fn (array $story): array => [
+            'id' => $story['id'],
+            'type' => $story['mediaType'],
+            'image' => $story['thumbnailUrl'] !== '' ? $story['thumbnailUrl'] : $story['mediaUrl'],
+            'url' => $story['permalink'] !== '' ? $story['permalink'] : null,
+            'timestamp' => $story['timestamp'] !== '' ? $story['timestamp'] : null,
+        ])->values();
     }
 
     private function csv(string $raw): array

@@ -17,6 +17,7 @@ use App\Services\Automation\ZernioAutomationSync;
 use App\Services\Zernio\ZernioClient;
 use App\Support\Buttons;
 use App\Support\Credentials;
+use App\Support\InstagramMedia;
 use App\Support\QuickReplies;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
@@ -36,7 +37,11 @@ class PanelController extends Controller
             'automations' => Automation::withCount('logs')->whereIn('instagram_account_id', $accountIds)->orderBy('priority')->latest()->take(8)->get(),
             'runs' => \App\Models\AutomationRun::whereIn('automation_id', $automationIds)->latest()->take(10)->get(),
             'conversations' => Conversation::with('contact')->whereIn('instagram_account_id', $accountIds)->latest('last_message_at')->take(6)->get(),
-            'events' => $isAdmin ? WebhookEvent::latest()->take(6)->get() : collect(),
+            'events' => WebhookEvent::query()
+                ->when(! $isAdmin, fn ($query) => $query->whereIn('instagram_account_id', $accountIds))
+                ->latest()
+                ->take(6)
+                ->get(),
             'stats' => [
                 'automations' => Automation::whereIn('instagram_account_id', $accountIds)->count(),
                 'active' => Automation::whereIn('instagram_account_id', $accountIds)->where('status', 'active')->count(),
@@ -209,6 +214,8 @@ class PanelController extends Controller
             ], 422);
         }
 
+        $zernio->forUser($account->user);
+
         $query = [];
         if (!empty($data['after'])) {
             // Stories use cursor-style pagination; keep the same value as returned by Zernio.
@@ -218,13 +225,11 @@ class PanelController extends Controller
         try {
             if ($data['type'] === 'stories') {
                 $response = $zernio->listInstagramStories($account->zernio_account_id, $query);
-                $items = data_get($response, 'stories', data_get($response, 'data.stories', []));
                 $source = 'zernio_instagram_stories';
             } else {
                 try {
                     // Preferred route: platform API-backed recent media.
                     $response = $zernio->listInstagramPosts($account->zernio_account_id, $query);
-                    $items = data_get($response, 'posts', data_get($response, 'data.posts', []));
                     $source = 'zernio_instagram_posts';
                 } catch (\Throwable $primaryException) {
                     // If the stored Zernio account id is stale, refresh it from the authoritative account list.
@@ -267,7 +272,6 @@ class PanelController extends Controller
                     try {
                         // Current Zernio also provides on-demand syncing for external platform posts.
                         $fallback = $zernio->listInstagramPostsViaSyncExternal($account->zernio_account_id);
-                        $items = data_get($fallback, 'posts', data_get($fallback, 'data.posts', []));
                         $response = $fallback;
                         $source = 'zernio_sync_external';
                     } catch (\Throwable $fallbackException) {
@@ -276,55 +280,9 @@ class PanelController extends Controller
                 }
             }
 
-            $items = is_array($items) ? $items : [];
-
-            $normalized = collect($items)
-                ->filter(fn ($item) => is_array($item))
-                ->map(static function (array $item): array {
-                    $id = (string) ($item['id']
-                        ?? $item['platformPostId']
-                        ?? $item['platform_post_id']
-                        ?? $item['_id']
-                        ?? '');
-
-                    $type = strtoupper((string) (
-                        $item['mediaType']
-                        ?? $item['media_type']
-                        ?? data_get($item, 'mediaItems.0.type', 'IMAGE')
-                    ));
-
-                    $productType = strtoupper((string) ($item['mediaProductType'] ?? $item['media_product_type'] ?? ''));
-                    if ($productType === 'REELS' && $type === 'VIDEO') {
-                        $type = 'REEL';
-                    }
-
-                    $isVideo = in_array($type, ['VIDEO', 'REEL'], true);
-                    $isCarousel = in_array($type, ['CAROUSEL_ALBUM', 'CAROUSEL'], true);
-                    $thumbnail = $item['thumbnailUrl']
-                        ?? $item['thumbnail_url']
-                        ?? data_get($item, 'mediaItems.0.thumbnail')
-                        ?? $item['mediaUrl']
-                        ?? $item['media_url']
-                        ?? null;
-                    $mediaUrl = $item['mediaUrl']
-                        ?? $item['media_url']
-                        ?? data_get($item, 'mediaItems.0.url');
-
-                    return [
-                        'id' => $id,
-                        'mediaType' => $type,
-                        'label' => $isCarousel ? 'آلبوم' : ($isVideo ? 'ویدیو / ریلز' : 'تصویر'),
-                        'thumbnailUrl' => $thumbnail,
-                        'mediaUrl' => $mediaUrl,
-                        'permalink' => $item['permalink'] ?? $item['platformPostUrl'] ?? $item['platform_post_url'] ?? null,
-                        'caption' => (string) ($item['caption'] ?? $item['content'] ?? ''),
-                        'timestamp' => $item['timestamp'] ?? $item['publishedAt'] ?? $item['published_at'] ?? null,
-                        'mediaProductType' => $productType,
-                    ];
-                })
-                ->filter(fn ($item) => $item['id'] !== '')
-                ->unique('id')
-                ->values();
+            $normalized = $data['type'] === 'stories'
+                ? InstagramMedia::stories($response)
+                : InstagramMedia::posts($response);
 
             return response()->json([
                 'ok' => true,
@@ -431,6 +389,7 @@ class PanelController extends Controller
             ], 422);
         }
 
+        $zernio->forUser($account->user);
         try {
             $response = $zernio->listWorkflows([
                 'accountId' => $account->zernio_account_id,
@@ -764,9 +723,14 @@ class PanelController extends Controller
                     $automation->update(['zernio_automation_id' => (string) $remoteId]);
                 }
             } catch (\Throwable $e) {
-                $automation->update(['status' => $previous]);
+                $reason = \Illuminate\Support\Str::limit(trim($e->getMessage()), 500);
+                $settings = is_array($automation->settings) ? $automation->settings : [];
+                $settings['nativeSyncError'] = $reason !== '' ? $reason : 'خطای نامشخص در همگام‌سازی با زرنیو';
+                $settings['nativeSyncFailedAt'] = now()->toIso8601String();
+
+                $automation->update(['status' => $previous, 'settings' => $settings]);
                 report($e);
-                return back()->withErrors(['automation' => 'وضعیت اتوماسیون ذخیره نشد. دسترسی حساب یا تنظیمات آن را بررسی کنید.']);
+                return back()->withErrors(['automation' => 'وضعیت اتوماسیون ذخیره نشد. علت: '.$settings['nativeSyncError']]);
             }
         }
 
@@ -832,6 +796,8 @@ class PanelController extends Controller
     {
         $this->authorizeConversation($conversation);
         $conversation->load('instagramAccount');
+        // Admins can reply in a tenant inbox; outbound calls must use the page owner's key.
+        $zernio->forUser($conversation->instagramAccount?->user);
 
         $data = $request->validate([
             'message' => 'nullable|string|max:10000',
@@ -1108,6 +1074,7 @@ class PanelController extends Controller
         if (! $conversation->instagramAccount) {
             return back()->withErrors(['conversation' => 'حساب این گفتگو در دسترس نیست.']);
         }
+        $zernio->forUser($conversation->instagramAccount->user);
 
         try {
             $archived = $conversation->status !== 'archived';
@@ -1132,6 +1099,7 @@ class PanelController extends Controller
         if (! $conversation->instagramAccount) {
             return response()->json(['ok'=>false,'message'=>'حساب گفتگو در دسترس نیست.'], 422);
         }
+        $zernio->forUser($conversation->instagramAccount->user);
         try {
             $zernio->addReaction($conversation->zernio_conversation_id, $message, $conversation->instagramAccount->zernio_account_id, $data['emoji']);
             return response()->json(['ok'=>true]);
@@ -1148,6 +1116,7 @@ class PanelController extends Controller
         if (! $conversation->instagramAccount) {
             return response()->json(['ok'=>false,'message'=>'حساب گفتگو در دسترس نیست.'], 422);
         }
+        $zernio->forUser($conversation->instagramAccount->user);
         try {
             $zernio->removeReaction($conversation->zernio_conversation_id, $message, $conversation->instagramAccount->zernio_account_id);
             return response()->json(['ok'=>true]);
@@ -1173,9 +1142,17 @@ class PanelController extends Controller
     {
         $automationIds = Tenancy::visibleAutomationIds();
 
+        // Tenants see the deliveries of their own pages. Admins still see every
+        // event; a non-admin must never receive another tenant's payload.
+        $events = WebhookEvent::query();
+        if (! auth()->user()->isAdmin()) {
+            $events->whereIn('instagram_account_id', Tenancy::visibleAccountIds());
+        }
+        $events->with('instagramAccount')->latest();
+
         return view('logs.index', [
             'logs' => AutomationLog::with('automation')->whereIn('automation_id', $automationIds)->latest()->paginate(50),
-            'events' => auth()->user()->isAdmin() ? WebhookEvent::latest()->paginate(20) : WebhookEvent::query()->whereRaw('0=1')->paginate(20),
+            'events' => $events->paginate(20),
         ]);
     }
 
@@ -1189,6 +1166,8 @@ class PanelController extends Controller
         $selected = $accounts->firstWhere('status', 'active');
 
         if ($selected) {
+            // Admins manage tenant pages: use the page owner's Zernio key.
+            $zernio->forUser($selected->user);
             try {
                 $health = $zernio->getAccountHealth($selected->zernio_account_id);
             } catch (\Throwable $e) {
@@ -1226,6 +1205,7 @@ class PanelController extends Controller
     {
         $data = $request->validate(['account_id' => ['required','integer','exists:instagram_accounts,id']]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $zernio->forUser($account->user);
         try {
             return response()->json(['ok'=>true,'data'=>$zernio->getAccountHealth($account->zernio_account_id)]);
         } catch (\Throwable $e) {
@@ -1242,6 +1222,7 @@ class PanelController extends Controller
             'items.*' => ['nullable','string','max:80'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $zernio->forUser($account->user);
         try {
             $items = array_values(array_filter(array_map(fn($v)=>trim((string)$v), $data['items'] ?? [])));
             $result = $zernio->saveIceBreakers($account->zernio_account_id, array_map(fn($q)=>['question'=>$q], $items));
@@ -1331,12 +1312,14 @@ class PanelController extends Controller
         // Re-sync only the automations this user can see. Previously every tenant's
         // automations were re-pushed using the session user's key, which leaked
         // across accounts and could overwrite another page owner's configuration.
+        $syncFailures = [];
         Automation::with(['keywords','actions','account'])
             ->whereIn('id', Tenancy::visibleAutomationIds())
             ->whereIn('trigger', ['comment','story_reply'])
             ->where('status', 'active')
             ->get()
-            ->each(function (Automation $automation) use ($nativeSync): void {
+            ->filter(fn (Automation $automation): bool => $automation->supportsNativeSync())
+            ->each(function (Automation $automation) use ($nativeSync, &$syncFailures): void {
                 try {
                     $response = $nativeSync->sync($automation);
                     $remoteId = data_get($response, 'id', data_get($response, '_id', data_get($response, 'commentAutomationId')));
@@ -1351,11 +1334,25 @@ class PanelController extends Controller
                         ]);
                     }
                 } catch (\Throwable $e) {
+                    $reason = \Illuminate\Support\Str::limit(trim($e->getMessage()), 500);
+                    $settings = is_array($automation->settings) ? $automation->settings : [];
+                    $settings['nativeSyncError'] = $reason !== '' ? $reason : 'خطای نامشخص در همگام‌سازی با زرنیو';
+                    $settings['nativeSyncFailedAt'] = now()->toIso8601String();
+
+                    $automation->update(['status' => 'paused', 'settings' => $settings]);
+                    $syncFailures[] = $automation->name.' ('.$settings['nativeSyncError'].')';
                     report($e);
                 }
             });
 
-        return back()->with('success', 'تنظیمات با موفقیت ذخیره شد.');
+        $response = back()->with('success', 'تنظیمات با موفقیت ذخیره شد.');
+        if ($syncFailures !== []) {
+            $response->withErrors([
+                'automation' => 'همگام‌سازی این اتوماسیون‌ها انجام نشد و متوقف شدند: '.implode('، ', array_slice($syncFailures, 0, 3)),
+            ]);
+        }
+
+        return $response;
     }
 
     public function notifications()
@@ -1579,7 +1576,15 @@ class PanelController extends Controller
             $response = app(ZernioAutomationSync::class)->sync($automation);
             $remoteId = data_get($response, 'id', data_get($response, '_id', data_get($response, 'commentAutomationId')));
             if ($remoteId) {
-                $automation->update(['zernio_automation_id' => (string) $remoteId, 'execution_mode' => 'zernio']);
+                $settings = is_array($automation->settings) ? $automation->settings : [];
+                unset($settings['nativeSyncError'], $settings['nativeSyncFailedAt']);
+                $settings['nativeSyncedAt'] = now()->toIso8601String();
+
+                $automation->update([
+                    'zernio_automation_id' => (string) $remoteId,
+                    'execution_mode' => 'zernio',
+                    'settings' => $settings,
+                ]);
                 return;
             }
 
@@ -1588,8 +1593,16 @@ class PanelController extends Controller
             }
         } catch (\Throwable $e) {
             report($e);
-            $automation->update(['status' => 'paused']);
-            session()->flash('warning', 'اتوماسیون ذخیره شد اما فعال نشد؛ اتصال حساب یا تنظیمات ارسال را بررسی کنید.');
+
+            // Keep the failure on the automation so the edit screen can explain
+            // why it was paused instead of silently flipping it off.
+            $reason = \Illuminate\Support\Str::limit(trim($e->getMessage()), 500);
+            $settings = is_array($automation->settings) ? $automation->settings : [];
+            $settings['nativeSyncError'] = $reason !== '' ? $reason : 'خطای نامشخص در همگام‌سازی با زرنیو';
+            $settings['nativeSyncFailedAt'] = now()->toIso8601String();
+
+            $automation->update(['status' => 'paused', 'settings' => $settings]);
+            session()->flash('warning', 'اتوماسیون ذخیره شد اما فعال نشد؛ علت: '.$settings['nativeSyncError']);
         }
     }
 

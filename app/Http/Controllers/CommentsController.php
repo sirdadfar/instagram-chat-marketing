@@ -30,6 +30,7 @@ class CommentsController extends Controller
         ]);
 
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $client->forUser($account->user);
         $query = [];
         if (!empty($data['cursor'])) $query['cursor'] = $data['cursor'];
 
@@ -55,6 +56,7 @@ class CommentsController extends Controller
             'message' => ['required', 'string', 'max:2200'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $client->forUser($account->user);
         try {
             $result = $client->replyToComment($data['post_id'], $data['comment_id'], $account->zernio_account_id, $data['message']);
             return response()->json(['ok' => true, 'data' => $result]);
@@ -74,6 +76,7 @@ class CommentsController extends Controller
             'buttons_json' => ['nullable','string','max:10000'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status','active')->firstOrFail();
+        $client->forUser($account->user);
         $body = ['message' => $data['message']];
         $quick = json_decode($data['quick_replies_json'] ?? '', true);
         $buttons = json_decode($data['buttons_json'] ?? '', true);
@@ -114,6 +117,7 @@ class CommentsController extends Controller
             'comment_id' => ['required', 'string', 'max:255'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $client->forUser($account->user);
         try {
             $result = $client->unhideComment($data['post_id'], $data['comment_id'], $account->zernio_account_id);
             return response()->json(['ok' => true, 'data' => $result]);
@@ -130,6 +134,7 @@ class CommentsController extends Controller
             'comment_id' => ['required', 'string', 'max:255'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $client->forUser($account->user);
         try {
             $result = $client->unlikeComment($data['post_id'], $data['comment_id'], $account->zernio_account_id);
             return response()->json(['ok' => true, 'data' => $result]);
@@ -147,6 +152,7 @@ class CommentsController extends Controller
             'comment_id' => ['required', 'string', 'max:255'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $client->forUser($account->user);
         try {
             $result = $client->likeComment($data['post_id'], $data['comment_id'], $account->zernio_account_id);
             return response()->json(['ok' => true, 'data' => $result]);
@@ -163,6 +169,7 @@ class CommentsController extends Controller
             'comment_id' => ['required', 'string', 'max:255'],
         ]);
         $account = Tenancy::accounts()->whereKey($data['account_id'])->where('status', 'active')->firstOrFail();
+        $client->forUser($account->user);
         try {
             $result = match ($action) {
                 'delete' => $client->deleteComment($data['post_id'], $data['comment_id'], $account->zernio_account_id),

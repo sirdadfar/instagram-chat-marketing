@@ -130,7 +130,9 @@ class OperationsController extends Controller
             'automationCount' => Automation::whereIn('instagram_account_id', $accountIds)->count(),
             'activeAutomationCount' => Automation::whereIn('instagram_account_id', $accountIds)->where('status', 'active')->count(),
             'contactCount' => Contact::whereIn('instagram_account_id', $accountIds)->count(),
-            'webhookCount' => auth()->user()->isAdmin() ? WebhookEvent::count() : 0,
+            'webhookCount' => auth()->user()->isAdmin()
+                ? WebhookEvent::count()
+                : WebhookEvent::whereIn('instagram_account_id', $accountIds)->count(),
             'failedCount' => AutomationLog::whereIn('automation_id', $automationIds)->where('status', 'failed')->count(),
             'runningCount' => $running,
             'failed' => $failed,

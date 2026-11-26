@@ -24,6 +24,14 @@
     <div class="edit-top-actions"><span class="status-badge {{ $automation->status }}"><i></i>{{ $statusLabels[$automation->status] ?? $automation->status }}</span><form method="POST" action="{{ route('automations.toggle',$automation) }}">@csrf<button class="secondary-action" type="submit">{{ $automation->status==='active'?'متوقف‌کردن':'فعال‌کردن' }}</button></form><button class="danger-action soft-danger" type="button" data-confirm-form="delete-edit-{{ $automation->id }}" data-confirm-title="حذف اتوماسیون" data-confirm-text="این اتوماسیون برای همیشه حذف می‌شود.">حذف</button><form id="delete-edit-{{ $automation->id }}" method="POST" action="{{ route('automations.destroy',$automation) }}" hidden>@csrf @method('DELETE')</form></div>
 </div>
 
+@if($syncError = data_get($automation->settings,'nativeSyncError'))
+<section class="panel-card" style="margin-bottom:18px">
+    <div class="section-head"><div><div class="eyebrow">همگام‌سازی بومی زرنیو</div><h2>اتوماسیون به همین دلیل متوقف شده است</h2></div></div>
+    <p class="error-text">{{ $syncError }}</p>
+    @if($failedAt = data_get($automation->settings,'nativeSyncFailedAt'))<small>آخرین تلاش: {{ $failedAt }}</small>@endif
+</section>
+@endif
+
 <form method="POST" action="{{ route('automations.update',$automation) }}" class="editor-layout" id="automationEditForm" data-trigger="{{ $trigger }}" data-triggers="{{ implode(',',$triggerValues) }}" data-public="{{ $isPublic ? "1" : "0" }}">
 @csrf @method('PUT')
 <input type="hidden" name="triggers_submitted" value="1">

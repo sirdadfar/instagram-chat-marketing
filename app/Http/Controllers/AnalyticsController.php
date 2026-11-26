@@ -32,6 +32,8 @@ class AnalyticsController extends Controller
         $apiNotice = null;
 
         if ($account) {
+            // Use the page owner's key so an admin can inspect tenant accounts.
+            $client->forUser($account->user);
             try {
                 $insights = $client->getInstagramAccountInsights($account->zernio_account_id, [
                     'metrics' => 'reach,views,accounts_engaged,total_interactions,follows_and_unfollows',

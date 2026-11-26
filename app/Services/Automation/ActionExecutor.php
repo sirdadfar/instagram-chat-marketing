@@ -12,6 +12,8 @@ use App\Support\FollowStatus;
 use Illuminate\Support\Str;
 class ActionExecutor {
  public function __construct(private ZernioClient $zernio, private TemplateRenderer $renderer) {}
+ /** Queue jobs must pin outbound calls to the page owner's Zernio key. */
+ public function forUser(?\App\Models\User $user): static {$this->zernio->forUser($user);return $this;}
  public function execute(Automation $a,array $action,array $context):array { $type=AutomationAction::tryFrom($action['action']??'');$cfg=$action['config']??[];if(!$type)return ['action'=>$action['action']??null,'status'=>'skipped','reason'=>'unknown_action'];$message=$this->renderer->render($cfg['message']??'',$context);try{return match($type){AutomationAction::PublicReply=>$this->publicReply($a,$context,$message),AutomationAction::PrivateReply=>$this->privateReply($a,$context,$message,$cfg),AutomationAction::DirectMessage=>$this->directMessage($a,$context,$message,$cfg),AutomationAction::HideComment=>$this->hide($a,$context),AutomationAction::AddTag=>$this->addTag($a,$context,$cfg)};}catch(\Throwable $e){return ['action'=>$type->value,'status'=>'failed','error'=>$e->getMessage()];} }
  private function publicReply(Automation $a,array $c,string $m):array {if(!$m||empty($c['post_id'])||empty($c['comment_id']))return ['action'=>'public_reply','status'=>'skipped','reason'=>'missing_data'];$r=$this->zernio->replyToComment($c['post_id'],$c['comment_id'],$a->account->zernio_account_id,$m);return ['action'=>'public_reply','status'=>'sent','response'=>$r];}
  private function privateReply(Automation $a,array $c,string $m,array $cfg):array {

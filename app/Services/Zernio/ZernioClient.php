@@ -301,7 +301,8 @@ class ZernioClient
      */
     public function uploadMediaDirect(UploadedFile $file): array
     {
-        $key = Credentials::zernioApiKey();
+        // Respect the user pinned by a queue job instead of the web session.
+        $key = Credentials::zernioApiKey($this->user);
 
         if (! $key) {
             throw new RuntimeException('کلید دسترسی سرویس تنظیم نشده است (تنظیمات پنل یا .env).');

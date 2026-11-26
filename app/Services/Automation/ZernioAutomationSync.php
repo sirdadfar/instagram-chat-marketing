@@ -27,12 +27,21 @@ final class ZernioAutomationSync
             return [];
         }
 
+        $automation->loadMissing('account');
+        // Use the page owner's key even when an admin edits a tenant automation.
+        $this->client->forUser($automation->account?->user);
+
         return $this->client->updateCommentAutomation($automation->zernio_automation_id, ['isActive' => false]);
     }
 
     public function sync(Automation $automation): array
     {
         $automation->loadMissing(['keywords', 'actions', 'account']);
+
+        // Native sync is always performed with the key of the page owner, not
+        // the signed-in user. Admins edit tenant automations, and their own key
+        // usually cannot manage another tenant's page.
+        $this->client->forUser($automation->account?->user);
 
         if (! $this->supports($automation)) {
             throw new \RuntimeException('این نوع اتوماسیون از مسیر بومی پشتیبانی نمی‌شود.');
