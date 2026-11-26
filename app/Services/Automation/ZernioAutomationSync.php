@@ -112,28 +112,33 @@ final class ZernioAutomationSync
             && trim((string) $dmMessage) !== '';
 
         // Zernio's comment-automation API requires the profile that owns the
-        // page. It is stored with the account during discovery; older rows need
-        // one lookup with the owner's key.
-        $profileId = trim((string) (data_get($automation->account->metadata, 'profileId')
-            ?? data_get($automation->account->metadata, 'profile._id')
-            ?? data_get($automation->account->metadata, 'profile.id')
-            ?? ''));
-        if ($profileId === '') {
-            try {
-                $listed = $this->client->listAccounts(['platform' => 'instagram']);
-                $items = data_get($listed, 'accounts', data_get($listed, 'data.accounts', data_get($listed, 'data', [])));
-                $match = collect(is_array($items) ? $items : [])->first(function ($row) use ($automation): bool {
-                    $id = $row['_id'] ?? $row['id'] ?? $row['accountId'] ?? null;
+        // page. Prefer a live lookup with the owner's key: stored metadata may
+        // come from another key whose profile id this key cannot use.
+        $profileId = '';
+        try {
+            $listed = $this->client->listAccounts(['platform' => 'instagram']);
+            $items = data_get($listed, 'accounts', data_get($listed, 'data.accounts', data_get($listed, 'data', [])));
+            $match = collect(is_array($items) ? $items : [])->first(function ($row) use ($automation): bool {
+                $id = $row['_id'] ?? $row['id'] ?? $row['accountId'] ?? null;
 
-                    return $id !== null && (string) $id === (string) $automation->account->zernio_account_id;
-                });
-                $profileId = trim((string) ($match['profileId'] ?? ''));
-            } catch (\Throwable $e) {
-                report($e);
-            }
+                return $id !== null && (string) $id === (string) $automation->account->zernio_account_id;
+            });
+            $profileId = trim((string) ($match['profileId'] ?? ''));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+        if ($profileId === '') {
+            $profileId = trim((string) (data_get($automation->account->metadata, 'profileId')
+                ?? data_get($automation->account->metadata, 'profile._id')
+                ?? data_get($automation->account->metadata, 'profile.id')
+                ?? ''));
         }
         if ($profileId === '') {
             throw new \RuntimeException('شناسه پروفایل زرنیو (profileId) این پیج پیدا نشد؛ پیج را با کلید مالک دوباره همگام‌سازی کنید.');
+        }
+        $metadata = is_array($automation->account->metadata) ? $automation->account->metadata : [];
+        if ((string) ($metadata['profileId'] ?? '') !== $profileId) {
+            $automation->account->update(['metadata' => array_merge($metadata, ['profileId' => $profileId])]);
         }
 
         $body = [
