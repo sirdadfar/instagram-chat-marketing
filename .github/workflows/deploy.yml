@@ -137,7 +137,7 @@ jobs:
           # Never leave production without a worker after a deploy.
           sleep 2
           if ! pgrep -f 'artisan queue:work' >/dev/null 2>&1; then
-            nohup php artisan queue:work --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90 >> storage/logs/worker.log 2>&1 &
+            nohup php artisan queue:work --sleep=0 --tries=3 --backoff=5,30,120 --timeout=90 >> storage/logs/worker.log 2>&1 &
           fi
 
           if command -v systemctl >/dev/null 2>&1; then

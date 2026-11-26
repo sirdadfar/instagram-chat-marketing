@@ -38,9 +38,20 @@ class ZernioClient
             ->acceptJson()
             ->asJson()
             ->timeout((int) config('zernio.timeout', 20))
-            // Laravel 12 accepts an integer or Closure as the second argument.
-            // Keep the backoff compatible with Laravel 12 instead of passing an array.
-            ->retry(3, 1000, throw: false);
+            // Retry only transient failures. Retrying a 401/422 wastes seconds
+            // per job and blocks the single queue worker behind a permanent error.
+            ->retry(2, 500, static function (\Throwable $e): bool {
+                if ($e instanceof \Illuminate\Http\Client\ConnectionException) {
+                    return true;
+                }
+                if ($e instanceof \Illuminate\Http\Client\RequestException) {
+                    $status = $e->response?->status();
+
+                    return $status === 429 || ($status !== null && $status >= 500);
+                }
+
+                return false;
+            }, throw: false);
     }
 
     public function get(string $uri, array $query = []): array

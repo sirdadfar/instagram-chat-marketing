@@ -96,9 +96,10 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
    return true;
   }
 
-  // The webhook profile is per-message and already fresh; only ask the API when
-  // Instagram did not reveal the relationship in the payload.
+  // The webhook profile is per-message and already fresh. Fall back to the
+  // contact's stored value before paying for a live API round trip.
   $status=FollowStatus::from($data['instagram_profile']??null);
+  if($status===null&&$contact&&$contact->is_follower!==null)$status=(bool)$contact->is_follower;
   if($status===null){
    try{
     $status=FollowStatus::from($zernio->getFollowStatus($account->zernio_account_id,(string)$data['user_id'],true));
@@ -106,7 +107,6 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
     report($e);
    }
   }
-  if($status===null&&$contact&&$contact->is_follower!==null)$status=(bool)$contact->is_follower;
 
   if($status===true){
    if(is_array($pending)){

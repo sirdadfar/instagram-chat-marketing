@@ -24,7 +24,7 @@
 
 ```ini
 [program:ig-automate-worker]
-command=php /var/www/instagram-chat-marketing/artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120
+command=php /var/www/instagram-chat-marketing/artisan queue:work database --sleep=0 --tries=3 --backoff=5,30,120
 directory=/var/www/instagram-chat-marketing
 autostart=true
 autorestart=true

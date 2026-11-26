@@ -124,7 +124,7 @@ php artisan zernio:account [ACCOUNT_ID] --username=your_username
 php artisan zernio:webhook --url=https://your-domain.example/api/webhooks/zernio
 
 # Start the queue worker (no Redis)
-php artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90
+php artisan queue:work database --sleep=0 --tries=3 --backoff=5,30,120 --timeout=90
 ```
 
 Then open the panel and **register** — the first user automatically becomes admin. Each user then adds their own Zernio API key in Settings (encrypted at rest, overrides the server `.env`).
@@ -191,13 +191,13 @@ Additional control effects in the pipeline: *Follow Gate* (`follow_gate:*` postb
 
 ```ini
 [program:ig-automate-worker]
-command=/usr/bin/php /var/www/ig-automate/artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90
+command=/usr/bin/php /var/www/ig-automate/artisan queue:work database --sleep=0 --tries=3 --backoff=5,30,120 --timeout=90
 directory=/var/www/ig-automate
 autostart=true
 autorestart=true
 stopasgroup=true
 killasgroup=true
-numprocs=2
+numprocs=4
 redirect_stderr=true
 stdout_logfile=/var/log/ig-automate-worker.log
 stopwaitsecs=3600
@@ -412,7 +412,7 @@ php artisan zernio:account [ACCOUNT_ID] --username=your_username
 php artisan zernio:webhook --url=https://your-domain.example/api/webhooks/zernio
 
 # اجرای Queue Worker (بدون Redis)
-php artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90
+php artisan queue:work database --sleep=0 --tries=3 --backoff=5,30,120 --timeout=90
 ```
 
 سپس پنل را باز کنید و **ثبت‌نام** کنید — نخستین کاربر به‌طور خودکار ادمین می‌شود. سپس هر کاربر کلید اختصاصی Zernio خود را در «تنظیمات» وارد می‌کند (رمزنگاری‌شده ذخیره می‌شود و بر `.env` سرور اولویت دارد).
@@ -479,13 +479,13 @@ php artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout
 
 ```ini
 [program:ig-automate-worker]
-command=/usr/bin/php /var/www/ig-automate/artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90
+command=/usr/bin/php /var/www/ig-automate/artisan queue:work database --sleep=0 --tries=3 --backoff=5,30,120 --timeout=90
 directory=/var/www/ig-automate
 autostart=true
 autorestart=true
 stopasgroup=true
 killasgroup=true
-numprocs=2
+numprocs=4
 redirect_stderr=true
 stdout_logfile=/var/log/ig-automate-worker.log
 stopwaitsecs=3600

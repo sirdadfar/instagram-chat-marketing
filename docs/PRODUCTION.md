@@ -53,20 +53,20 @@ Never point Apache to the Laravel project root.
 ## 5. Queue worker — no Redis
 Run:
 ```bash
-php artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90
+php artisan queue:work database --sleep=0 --tries=3 --backoff=5,30,120 --timeout=90
 ```
 
 Recommended Supervisor program:
 ```ini
 [program:ig-automate-worker]
 process_name=%(program_name)s_%(process_num)02d
-command=/usr/bin/php /var/www/ig-automate/artisan queue:work database --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90
+command=/usr/bin/php /var/www/ig-automate/artisan queue:work database --sleep=0 --tries=3 --backoff=5,30,120 --timeout=90
 directory=/var/www/ig-automate
 autostart=true
 autorestart=true
 stopasgroup=true
 killasgroup=true
-numprocs=2
+numprocs=4
 redirect_stderr=true
 stdout_logfile=/var/log/ig-automate-worker.log
 stopwaitsecs=3600
