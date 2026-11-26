@@ -577,6 +577,30 @@
     const contentBoard=qs('[data-content-board]');
     if(contentBoard){qsa('[data-content-filter] .filter-chip').forEach(chip=>chip.addEventListener('click',()=>{qsa('[data-content-filter] .filter-chip').forEach(x=>x.classList.remove('active'));chip.classList.add('active');const f=chip.dataset.filter;qsa('[data-content-kind]',contentBoard).forEach(card=>card.style.display=f==='all'||card.dataset.contentKind===f?'':'none');}));}
 
+    // Automation hub: grid/list preference + auto-submitting toolbar selects
+    const automationGrid=qs('[data-automation-grid]');
+    const automationViewButtons=qsa('[data-automation-view]');
+    if(automationGrid&&automationViewButtons.length){
+        const viewKey='instagram-panel-automation-view';
+        let savedView=null;
+        try{savedView=localStorage.getItem(viewKey);}catch(e){}
+        const applyAutomationView=view=>{
+            automationGrid.classList.toggle('is-list',view==='list');
+            automationViewButtons.forEach(btn=>{
+                const active=btn.dataset.automationView===view;
+                btn.classList.toggle('is-active',active);
+                btn.setAttribute('aria-pressed',active?'true':'false');
+            });
+        };
+        applyAutomationView(savedView==='list'?'list':'grid');
+        automationViewButtons.forEach(btn=>btn.addEventListener('click',()=>{
+            const view=btn.dataset.automationView==='list'?'list':'grid';
+            applyAutomationView(view);
+            try{localStorage.setItem(viewKey,view);}catch(e){}
+        }));
+    }
+    qsa('[data-auto-submit]').forEach(field=>field.addEventListener('change',()=>field.form?.requestSubmit()));
+
     // Inbox filtering
     const inboxSearch=qs('#inboxSearch'); inboxSearch?.addEventListener('input',()=>{const q=inboxSearch.value.toLowerCase().trim();qsa('[data-inbox-row]').forEach(row=>row.style.display=!q||row.dataset.search.includes(q)?'':'none');});
 

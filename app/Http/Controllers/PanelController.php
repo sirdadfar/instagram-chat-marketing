@@ -52,14 +52,77 @@ class PanelController extends Controller
         ]);
     }
 
-    public function automations()
+    public function automations(Request $request)
     {
+        $accountIds = Tenancy::visibleAccountIds();
+        $base = Automation::query()->whereIn('instagram_account_id', $accountIds);
+        $automationIds = (clone $base)->pluck('id')->all();
+
+        $statusInput = $request->query('status');
+        $status = is_string($statusInput) && in_array($statusInput, ['active', 'paused', 'draft'], true)
+            ? $statusInput
+            : 'all';
+
+        $sortInput = $request->query('sort');
+        $sort = is_string($sortInput) && in_array($sortInput, ['priority', 'newest', 'oldest', 'runs', 'name'], true)
+            ? $sortInput
+            : 'priority';
+
+        $searchInput = $request->query('q');
+        $search = is_string($searchInput) ? mb_substr(trim($searchInput), 0, 100) : '';
+
+        $statusCounts = (clone $base)
+            ->selectRaw('status, count(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
+        $query = (clone $base)
+            ->with(['account', 'actions', 'keywords'])
+            ->withCount(['logs', 'runs'])
+            ->when($status !== 'all', fn ($builder) => $builder->where('status', $status))
+            ->when($search !== '', function ($builder) use ($search): void {
+                $term = '%'.$search.'%';
+                $builder->where(function ($builder) use ($term): void {
+                    $builder->where('name', 'like', $term)
+                        ->orWhereHas('account', fn ($account) => $account
+                            ->where('username', 'like', $term)
+                            ->orWhere('name', 'like', $term));
+                });
+            });
+
+        switch ($sort) {
+            case 'newest':
+                $query->latest();
+                break;
+            case 'oldest':
+                $query->oldest();
+                break;
+            case 'runs':
+                $query->orderByDesc('runs_count')->orderBy('priority');
+                break;
+            case 'name':
+                $query->orderBy('name');
+                break;
+            default:
+                $query->orderBy('priority')->orderByDesc('id');
+        }
+
+        $statistics = [
+            'total' => (int) $statusCounts->sum(),
+            'active' => (int) ($statusCounts['active'] ?? 0),
+            'paused' => (int) ($statusCounts['paused'] ?? 0),
+            'draft' => (int) ($statusCounts['draft'] ?? 0),
+            'runs' => \App\Models\AutomationRun::whereIn('automation_id', $automationIds)->count(),
+            'failed' => AutomationLog::whereIn('automation_id', $automationIds)
+                ->where('status', 'failed')
+                ->where('created_at', '>=', now()->subDays(7))
+                ->count(),
+        ];
+
         return view('automations.index', [
-            'automations' => Automation::with(['account', 'actions'])
-                ->whereIn('instagram_account_id', Tenancy::visibleAccountIds())
-                ->withCount(['logs', 'runs'])
-                ->orderBy('priority')
-                ->paginate(20),
+            'automations' => $query->paginate(18)->withQueryString(),
+            'statistics' => $statistics,
+            'filters' => ['status' => $status, 'sort' => $sort, 'q' => $search],
         ]);
     }
 
