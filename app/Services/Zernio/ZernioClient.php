@@ -85,6 +85,12 @@ class ZernioClient
         return $this->get('/accounts', $query);
     }
 
+    /** Disconnect and remove a page from Zernio. */
+    public function deleteAccount(string $accountId): array
+    {
+        return $this->delete('/accounts/' . rawurlencode($accountId));
+    }
+
     public function listWorkflows(array $query = []): array
     {
         return $this->get('/workflows', $query);

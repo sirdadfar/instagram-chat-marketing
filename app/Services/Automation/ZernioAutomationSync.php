@@ -7,6 +7,7 @@ namespace App\Services\Automation;
 use App\Models\Automation;
 use App\Services\Zernio\ZernioClient;
 use App\Models\AppSetting;
+use App\Support\FollowGate;
 
 final class ZernioAutomationSync
 {
@@ -84,14 +85,18 @@ final class ZernioAutomationSync
             $matchMode = 'contains';
         }
 
+        // A keyword-less native automation only exists when this automation's
+        // own gate is on; a per-automation opt-out must keep its keywords.
+        $keywordlessGate = in_array($trigger, ['comment', 'story_reply'], true)
+            && FollowGate::enabled($automation)
+            && (bool) AppSetting::getValue('follow_gate_without_keywords', false)
+            && trim((string) $dmMessage) !== '';
+
         $body = [
             'name' => $automation->name,
             'accountId' => $automation->account->zernio_account_id,
             'trigger' => $trigger,
-            'keywords' => ((bool) AppSetting::getValue('follow_gate_without_keywords', false)
-                && (bool) AppSetting::getValue('follow_gate_enabled', true)
-                && trim((string) $dmMessage) !== ''
-                && in_array($trigger, ['comment', 'story_reply'], true)) ? [] : $keywords,
+            'keywords' => $keywordlessGate ? [] : $keywords,
             'matchMode' => $matchMode,
             'excludeKeywords' => $excluded,
             'isActive' => $automation->status === 'active',
@@ -189,12 +194,11 @@ final class ZernioAutomationSync
 
         // Follow gate is a native Instagram audience rule:
         // only followers receive the main DM; unknown first-time commenters are asked to confirm after following.
-        $gateWithoutKeywords = (bool) AppSetting::getValue('follow_gate_without_keywords', false);
         $hasConfiguredKeywords = count($keywords) > 0;
         $gateEnabled = in_array($trigger, ['comment', 'story_reply'], true)
-            && (bool) AppSetting::getValue('follow_gate_enabled', true)
+            && FollowGate::enabled($automation)
             && trim((string) $dmMessage) !== ''
-            && ($hasConfiguredKeywords || $gateWithoutKeywords);
+            && ($hasConfiguredKeywords || FollowGate::withoutKeywordsEnabled());
 
         if ($gateEnabled) {
             $existingAudience = is_array($automation->audience) ? $automation->audience : [];
@@ -207,10 +211,11 @@ final class ZernioAutomationSync
                 $body['audience']['minFollowerCount'] = (int) $existingAudience['minFollowerCount'];
             }
 
+            $gate = FollowGate::config($automation);
             $body['followGate'] = [
-                'message' => trim((string) AppSetting::getValue('follow_gate_message', 'دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.')),
-                'buttonLabel' => trim((string) AppSetting::getValue('follow_gate_button_label', 'فالو کردم ✓')),
-                'notFollowingMessage' => trim((string) AppSetting::getValue('follow_gate_not_following_message', 'هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.')),
+                'message' => $gate['message'],
+                'buttonLabel' => $gate['buttonLabel'],
+                'notFollowingMessage' => $gate['notFollowingMessage'],
             ];
         }
 

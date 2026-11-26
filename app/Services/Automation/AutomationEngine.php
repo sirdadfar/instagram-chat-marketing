@@ -4,6 +4,8 @@ use App\Models\Automation;
 use App\Models\AutomationLog;
 use App\Models\AutomationUserCooldown;
 use App\Models\AppSetting;
+use App\Support\FollowGate;
+use App\Support\FollowStatus;
 use Illuminate\Support\Facades\DB;
 class AutomationEngine {
  public function __construct(private KeywordMatcher $matcher, private BusinessHours $hours, private RateLimiter $limiter) {}
@@ -21,12 +23,29 @@ class AutomationEngine {
   return ['pass'=>$pass,'gate_only'=>$pass&&$gateOnly,'keywords'=>$keyword,'target_match'=>$targetOk,'trigger_match'=>$triggerOk,'audience'=>$aud,'global_enabled'=>$global,'business_hours'=>$business];
  }
  private function keywordlessGateAllowed(Automation $a):bool {
-  if(!(bool)AppSetting::getValue('follow_gate_enabled',true))return false;
-  if(!(bool)AppSetting::getValue('follow_gate_without_keywords',false))return false;
+  if(!FollowGate::enabled($a))return false;
+  if(!FollowGate::withoutKeywordsEnabled())return false;
   $a->loadMissing('actions');
   return $a->actions->contains(static fn($action):bool=>$action->action==='direct_message');
  }
- private function audience(Automation $a,array $c):array { $cfg=$a->audience??[]; $profile=$c['instagram_profile']??[]; $status=$profile['isFollower'] ?? null; $wanted=$cfg['followerStatus']??'any'; if($wanted==='any')return ['pass'=>true,'status'=>$status]; if($status===null){return ['pass'=>($cfg['whenUnknown']??'send')==='send','status'=>null,'unknown'=>true];} if($wanted==='follower' && $status!==true)return ['pass'=>false,'status'=>$status]; if($wanted==='non_follower' && $status!==false)return ['pass'=>false,'status'=>$status]; if(!empty($cfg['minFollowerCount']) && (int)($profile['followerCount']??0)<(int)$cfg['minFollowerCount'])return ['pass'=>false,'status'=>$status]; return ['pass'=>true,'status'=>$status]; }
+ private function audience(Automation $a,array $c):array {
+  $cfg=$a->audience??[];
+  $profile=is_array($c['instagram_profile']??null)?$c['instagram_profile']:[];
+  $status=FollowStatus::from($c['instagram_profile']??null);
+  $wanted=$cfg['followerStatus']??'any';
+  if($wanted==='any')return ['pass'=>true,'status'=>$status];
+  if($status===null){$when=(string)($cfg['whenUnknown']??'send');return ['pass'=>$when==='send'||($when==='verify'&&FollowGate::enabled($a)),'status'=>null,'unknown'=>true];}
+  if($wanted==='follower'&&$status!==true){
+   // A known non-follower must still reach the gate prompt instead of being
+   // silently dropped; the executor sends the "must follow" copy and holds
+   // the real DM until the follow is confirmed.
+   if($status===false&&FollowGate::enabled($a)&&!FollowGate::targetsNonFollowers($a))return ['pass'=>true,'status'=>$status,'gate_expected'=>true];
+   return ['pass'=>false,'status'=>$status];
+  }
+  if($wanted==='non_follower'&&$status!==false)return ['pass'=>false,'status'=>$status];
+  if(!empty($cfg['minFollowerCount'])&&(int)($profile['followerCount']??0)<(int)$cfg['minFollowerCount'])return ['pass'=>false,'status'=>$status];
+  return ['pass'=>true,'status'=>$status];
+ }
  public function canRun(Automation $a,?string $userKey):array { if(!$userKey)return [true,null]; $row=AutomationUserCooldown::firstOrCreate(['automation_id'=>$a->id,'user_key'=>$userKey],['daily_count'=>0,'count_date'=>now()->toDateString()]); if(!$row->count_date || $row->count_date->toDateString()!==now()->toDateString()){$row->update(['daily_count'=>0,'count_date'=>now()->toDateString()]);$row->refresh();} if($a->max_per_user_day!==null && $row->daily_count >= $a->max_per_user_day)return [false,'daily_limit']; if($a->cooldown_seconds>0 && $row->last_executed_at && $row->last_executed_at->gt(now()->subSeconds($a->cooldown_seconds)))return [false,'cooldown']; if(!$this->limiter->allow('automation:'.$a->id.':global',(int)($a->settings['rate_limit_per_minute']??30),60))return [false,'rate_limit']; return [true,null]; }
  public function markRun(Automation $a,?string $userKey):void {if(!$userKey)return; AutomationUserCooldown::updateOrCreate(['automation_id'=>$a->id,'user_key'=>$userKey],['last_executed_at'=>now(),'daily_count'=>DB::raw('daily_count + 1'),'count_date'=>now()->toDateString()]);}
  public function log(Automation $a,array $context,array $evaluation,string $status='matched',?string $error=null,array $actions=[]):AutomationLog{return $a->logs()->create(['event_type'=>$context['event_type']??null,'event_id'=>$context['event_id']??null,'status'=>$status,'input'=>$context,'matched_keywords'=>$evaluation['keywords']['matched']??[],'conditions'=>$evaluation,'actions_result'=>$actions,'error'=>$error]);}

@@ -1137,10 +1137,12 @@ class PanelController extends Controller
 
     public function settings(ZernioClient $zernio)
     {
-        $accounts = Tenancy::accounts()->where('status', 'active')->orderBy('username')->get();
+        // Every visible page is listed so inactive/imported ones can be managed
+        // and removed; the health/ice-breaker card only uses the first active page.
+        $accounts = Tenancy::accounts()->orderBy('username')->get();
         $health = null;
         $iceBreakers = [];
-        $selected = $accounts->first();
+        $selected = $accounts->firstWhere('status', 'active');
 
         if ($selected) {
             try {
@@ -1165,6 +1167,7 @@ class PanelController extends Controller
             'followGateMessage' => (string) AppSetting::getValue('follow_gate_message', 'دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.'),
             'followGateButtonLabel' => (string) AppSetting::getValue('follow_gate_button_label', 'فالو کردم ✓'),
             'followGateNotFollowingMessage' => (string) AppSetting::getValue('follow_gate_not_following_message', 'هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.'),
+            'followGateUnknownMessage' => (string) AppSetting::getValue('follow_gate_unknown_message', 'فعلاً وضعیت فالو قابل بررسی نیست. چند لحظه بعد دوباره روی «فالو کردم» بزن.'),
 
             'selectedAccount' => $selected,
             'health' => $health,
@@ -1268,6 +1271,7 @@ class PanelController extends Controller
         AppSetting::setValue('follow_gate_message', trim((string) $r->input('follow_gate_message', 'دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.')));
         AppSetting::setValue('follow_gate_button_label', trim((string) $r->input('follow_gate_button_label', 'فالو کردم ✓')));
         AppSetting::setValue('follow_gate_not_following_message', trim((string) $r->input('follow_gate_not_following_message', 'هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.')));
+        AppSetting::setValue('follow_gate_unknown_message', trim((string) $r->input('follow_gate_unknown_message', 'فعلاً وضعیت فالو قابل بررسی نیست. چند لحظه بعد دوباره روی «فالو کردم» بزن.')));
 
         $hours = [];
         for ($i = 0; $i < 7; $i++) {
@@ -1442,11 +1446,39 @@ class PanelController extends Controller
         return back()->with('success', $message);
     }
 
-    /** DELETE /settings/accounts/{account} → remove a page from this panel. */
-    public function destroyAccount(int $account): \Illuminate\Http\RedirectResponse
+    /** DELETE /settings/accounts/{account} → disconnect upstream and remove the page from this panel. */
+    public function destroyAccount(int $account, Audit $audit): \Illuminate\Http\RedirectResponse
     {
         $instagramAccount = Tenancy::accounts()->whereKey($account)->firstOrFail();
-        $username = $instagramAccount->username ? '@'.$instagramAccount->username : 'پیج اینستاگرام';
+        $username = $instagramAccount->username ? '@'.$instagramAccount->username : 'این پیج';
+        $id = (int) $instagramAccount->getKey();
+        $before = $instagramAccount->toArray();
+
+        // Disconnect in Zernio first so the next sync does not re-import the page.
+        // A 404 means it is already gone upstream, which counts as success.
+        // Legacy rows may have an empty id; never send DELETE /accounts/.
+        $remoteError = null;
+        $remoteDisconnected = false;
+        $remoteId = trim((string) $instagramAccount->zernio_account_id);
+
+        if ($remoteId !== '') {
+            try {
+                app(ZernioClient::class)
+                    ->forUser($instagramAccount->user)
+                    ->deleteAccount($remoteId);
+                $remoteDisconnected = true;
+            } catch (\Illuminate\Http\Client\RequestException $e) {
+                if ($e->response?->status() === 404) {
+                    $remoteDisconnected = true;
+                } else {
+                    report($e);
+                    $remoteError = true;
+                }
+            } catch (\Throwable $e) {
+                report($e);
+                $remoteError = true;
+            }
+        }
 
         DB::transaction(function () use ($instagramAccount): void {
             // Related automations are removed by the account foreign-key cascade.
@@ -1454,7 +1486,21 @@ class PanelController extends Controller
             $instagramAccount->delete();
         });
 
-        return back()->with('success', "اتصال {$username} از پنل حذف شد. اتوماسیون‌های وابسته نیز حذف شدند.");
+        $audit->record('instagram_account.deleted', InstagramAccount::class, $id, $before, null);
+
+        $success = $remoteDisconnected
+            ? "{$username} از پنل حذف شد و اتصالش در زرنیو قطع شد؛ گفتگوها و مخاطبین باقی می‌مانند."
+            : "{$username} از پنل حذف شد؛ گفتگوها و مخاطبین باقی می‌مانند.";
+
+        $response = back()->with('success', $success);
+
+        if ($remoteError) {
+            $response->withErrors([
+                'account' => "{$username} از پنل حذف شد، اما قطع اتصال آن در زرنیو انجام نشد؛ ممکن است با همگام‌سازی بعدی دوباره به پنل برگردد.",
+            ]);
+        }
+
+        return $response;
     }
 
     private static function credentialStatusLabels(string $status): string

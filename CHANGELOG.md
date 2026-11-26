@@ -10,8 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Open-source packaging: MIT license, contributing guide, code of conduct,
   security policy, CI workflow and a PHPUnit test suite.
+- Connected pages can be removed from Settings; the page is disconnected from
+  Zernio and its local automations are deleted while conversations/contacts
+  are retained.
+- Follow-gate copy can be configured per automation and the unknown-status
+  prompt has its own message.
 
 ### Fixed
+- A missing/unknown Instagram follow status is no longer treated as
+  "not a follower", so followers are not asked to follow again when the
+  status check fails or returns `consent_required`.
+- The local follow gate now respects the per-automation toggle, the
+  non-follower audience and the daily no-nag limit.
+- Incoming webhooks no longer wipe a contact's known `is_follower` flag when
+  the payload omits the Instagram profile.
 - Admin bootstrap and Zernio helper commands now read their values from
   `config()` instead of `env()`, so they keep working after `config:cache`.
 - `Settings` no longer re-syncs other tenants' automations to the service.

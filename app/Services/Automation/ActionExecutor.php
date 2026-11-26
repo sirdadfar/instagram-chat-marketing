@@ -7,6 +7,8 @@ use App\Models\Conversation;
 use App\Models\Tag;
 use App\Models\AppSetting;
 use App\Services\Zernio\ZernioClient;
+use App\Support\FollowGate;
+use App\Support\FollowStatus;
 use Illuminate\Support\Str;
 class ActionExecutor {
  public function __construct(private ZernioClient $zernio, private TemplateRenderer $renderer) {}
@@ -14,15 +16,14 @@ class ActionExecutor {
  private function publicReply(Automation $a,array $c,string $m):array {if(!$m||empty($c['post_id'])||empty($c['comment_id']))return ['action'=>'public_reply','status'=>'skipped','reason'=>'missing_data'];$r=$this->zernio->replyToComment($c['post_id'],$c['comment_id'],$a->account->zernio_account_id,$m);return ['action'=>'public_reply','status'=>'sent','response'=>$r];}
  private function privateReply(Automation $a,array $c,string $m,array $cfg):array {if(!$m||empty($c['post_id'])||empty($c['comment_id']))return ['action'=>'private_reply','status'=>'skipped','reason'=>'missing_data'];$body=['message'=>$m];if(!empty($cfg['buttons']))$body['buttons']=$cfg['buttons'];elseif(!empty($cfg['quickReplies']))$body['quickReplies']=$cfg['quickReplies'];$r=$this->zernio->privateReply($c['post_id'],$c['comment_id'],$a->account->zernio_account_id,$body);return ['action'=>'private_reply','status'=>'sent','response'=>$r];}
  private function directMessage(Automation $a,array $c,string $m,array $cfg):array {
-  if (empty($c['follow_gate_bypass']) && (bool) AppSetting::getValue('follow_gate_enabled', true) && !empty($c['user_id'])) {
-    try {
-      $follow = $this->zernio->getFollowStatus($a->account->zernio_account_id, (string) $c['user_id'], true);
-    } catch (\Throwable $e) {
-      $follow = ['isFollower' => data_get($c, 'instagram_profile.isFollower')];
-    }
-    if (data_get($follow, 'isFollower') !== true) {
-      $token=$this->storeFollowGatePending($a, $c);
-      $this->sendFollowGate($a, $c, $token);
+  if (empty($c['follow_gate_bypass']) && !empty($c['user_id']) && FollowGate::enabled($a) && !FollowGate::targetsNonFollowers($a)) {
+    $status = $this->resolveFollowerStatus($a, $c);
+    if ($status !== true) {
+      // Never nag: the gate-only path may already have sent the prompt today.
+      if (!$this->hasRecentFollowGatePrompt($a, $c)) {
+        $token=$this->storeFollowGatePending($a, $c);
+        $this->sendFollowGate($a, $c, $token, $status);
+      }
       return ['action'=>'direct_message','status'=>'waiting_follow','reason'=>'follow_required'];
     }
   }
@@ -49,24 +50,44 @@ class ActionExecutor {
   */
  public function enforceFollowGate(Automation $a,array $c):bool {
   if (empty($c['user_id']) || empty($c['conversation_id'])) return false;
-  try {
-   $follow = $this->zernio->getFollowStatus($a->account->zernio_account_id, (string) $c['user_id'], true);
-  } catch (\Throwable $e) {
-   $follow = ['isFollower' => data_get($c, 'instagram_profile.isFollower')];
-  }
-  if (data_get($follow, 'isFollower') === true) return false;
+  if (! FollowGate::enabled($a) || FollowGate::targetsNonFollowers($a)) return false;
+  $status = $this->resolveFollowerStatus($a, $c);
+  if ($status === true) return false;
   // Do not nag: one pending prompt per contact/automation per day.
   $contact = Contact::where('instagram_account_id',$a->account->id)->where('external_user_id',(string)$c['user_id'])->first();
+  if ($this->hasRecentFollowGatePrompt($a, $c, $contact)) return false;
+  $token = $this->storeFollowGatePending($a, $c);
+  $this->sendFollowGate($a, $c, $token, $status);
+  return true;
+ }
+ /**
+  * Tri-state follower lookup: fresh API value wins, then the webhook profile,
+  * then the last value persisted on the contact.
+  */
+ private function resolveFollowerStatus(Automation $a,array $c):?bool {
+  $profile = FollowStatus::from($c['instagram_profile'] ?? null);
+  if (!empty($c['user_id'])) {
+   try {
+    $fresh = FollowStatus::from($this->zernio->getFollowStatus($a->account->zernio_account_id, (string) $c['user_id'], true));
+    if ($fresh !== null) return $fresh;
+   } catch (\Throwable $e) {
+    // Transport/consent errors are unknown, not "not a follower".
+   }
+   if ($profile !== null) return $profile;
+   $contact = Contact::where('instagram_account_id',$a->account->id)->where('external_user_id',(string)$c['user_id'])->first();
+   if ($contact && $contact->is_follower !== null) return (bool) $contact->is_follower;
+   return null;
+  }
+  return $profile;
+ }
+ private function hasRecentFollowGatePrompt(Automation $a,array $c,?Contact $contact=null):bool {
+  if (empty($c['user_id'])) return false;
+  $contact ??= Contact::where('instagram_account_id',$a->account->id)->where('external_user_id',(string)$c['user_id'])->first();
   $pending = data_get($contact?->metadata, 'follow_gate_pending');
-  if (is_array($pending)
+  return is_array($pending)
       && (int) ($pending['automation_id'] ?? 0) === (int) $a->id
       && !empty($pending['created_at'])
-      && \Illuminate\Support\Carbon::parse($pending['created_at'])->gt(now()->subDay())) {
-   return false;
-  }
-  $token = $this->storeFollowGatePending($a, $c);
-  $this->sendFollowGate($a, $c, $token);
-  return true;
+      && \Illuminate\Support\Carbon::parse($pending['created_at'])->gt(now()->subDay());
  }
  private function storeFollowGatePending(Automation $a,array $c):string {
   if (empty($c['user_id'])) return ''; 
@@ -86,9 +107,10 @@ class ActionExecutor {
   return $token;
  }
 
- private function sendFollowGate(Automation $a,array $c,string $token):void {
-  $message=(string) AppSetting::getValue('follow_gate_message','دوست خوبم حتماً باید پیج رو فالو داشته باشی تا بتونیم بهت پیام بدیم.');
-  $label=(string) AppSetting::getValue('follow_gate_button_label','فالو کردم ✓');
+ private function sendFollowGate(Automation $a,array $c,string $token,?bool $status):void {
+  $gate=FollowGate::config($a);
+  $message=$status === false ? $gate['notFollowingMessage'] : $gate['unknownMessage'];
+  $label=$gate['buttonLabel'];
   $button=[['type'=>'postback','title'=>mb_substr($label,0,20),'payload'=>'follow_gate:'.(string)$token]];
   if (!empty($c['conversation_id'])) {
     $this->zernio->sendMessage($c['conversation_id'],$a->account->zernio_account_id,['message'=>$message,'buttons'=>$button],(string)Str::uuid());
