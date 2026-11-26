@@ -30,7 +30,7 @@ A private, production-oriented **multi-tenant Instagram automation panel** built
 - **Actions:** public comment reply · private reply · DM · hide comment · local contact tagging
 - **Keyword matching:** `ANY` / `ALL` with `contains` / `exact` / `word` modes and keyword exclusions
 - **Audience rules:** follower-only targeting with explicit handling for *unknown* followers (`send` / `skip` / `verify`)
-- **Follow Gate:** sends a "I followed ✓" postback button, verifies follow status via Zernio, and re-enters the automation pipeline only when the user actually follows
+- **Follow Gate:** sends a "I followed ✓" postback button, verifies follow status via Zernio, and re-enters the automation pipeline only when the user actually follows; when no automation matches, it sends a panel-configured confirmation message
 - **Message delays:** independent delays for private replies and public replies
 - **Safety controls:** global kill switch, business hours, rate-limit buckets, per-user cooldown & daily limits
 - **Dry-run simulator:** test any automation against a sample event without side effects
@@ -319,7 +319,7 @@ kept. See [`LICENSE`](LICENSE).
 - **اکشن‌ها:** پاسخ عمومی کامنت · پاسخ خصوصی · دایرکت · مخفی‌سازی کامنت · تگ‌گذاری محلی مخاطب
 - **تطبیق کلمات کلیدی:** حالت‌های `ANY` / `ALL` با `contains` / `exact` / `word` و کلمات مستثنی
 - **قوانین مخاطب:** تمرکز روی فالوورها با رفتار مشخص برای «وضعیت نامشخص» (`ارسال` / `صرف‌نظر` / `بررسی`)
-- **Follow Gate:** ارسال دکمه‌ی postback «فالو کردم ✓»، استعلام وضعیت فالو از Zernio و ادامه‌ی اتوماسیون فقط پس از تأیید واقعی فالو
+- **Follow Gate:** ارسال دکمه‌ی postback «فالو کردم ✓»، استعلام وضعیت فالو از Zernio و ادامه‌ی اتوماسیون فقط پس از تأیید واقعی فالو؛ اگر اتوماسیونی برای پاسخ وجود نداشته باشد، پیام تأییدِ قابل‌تنظیم از پنل ارسال می‌شود
 - **تأخیر پیام:** تأخیر مستقل برای پاسخ خصوصی و پاسخ عمومی
 - **کنترل‌های ایمنی:** کلید قطع سراسری (Kill Switch) · ساعات کاری · باکت‌های Rate Limit · Cooldown و سقف روزانه بر اساس کاربر
 - **شبیه‌ساز Dry-Run:** آزمایش هر اتوماسیون روی رویداد نمونه بدون اثر جانبی

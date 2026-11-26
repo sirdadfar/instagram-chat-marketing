@@ -24,6 +24,8 @@ final class FollowGate
 
     public const DEFAULT_UNKNOWN_MESSAGE = 'فعلاً وضعیت فالو قابل بررسی نیست. چند لحظه بعد دوباره روی «فالو کردم» بزن.';
 
+    public const DEFAULT_CONFIRMED_MESSAGE = 'فالو شما تأیید شد ✅ ادمین پیج به‌زودی بهتون پاسخ می‌ده.';
+
     /**
      * Whether the follow gate should run for this automation.
      */
@@ -63,7 +65,7 @@ final class FollowGate
     /**
      * Resolved gate copy for an automation.
      *
-     * @return array{message: string, buttonLabel: string, notFollowingMessage: string, unknownMessage: string}
+     * @return array{message: string, buttonLabel: string, notFollowingMessage: string, unknownMessage: string, confirmedMessage: string}
      */
     public static function config(Automation $a): array
     {
@@ -86,6 +88,13 @@ final class FollowGate
                 'follow_gate_unknown_message',
                 self::DEFAULT_UNKNOWN_MESSAGE
             ),
+            // Sent after a successful follow confirmation when there is no
+            // automation reply to resume (or it produced nothing to send).
+            'confirmedMessage' => self::pick(
+                $local['confirmedMessage'] ?? null,
+                'follow_gate_confirmed_message',
+                self::DEFAULT_CONFIRMED_MESSAGE
+            ),
         ];
     }
 
@@ -93,7 +102,7 @@ final class FollowGate
      * Same as config(), for callers without an Automation (e.g. a webhook whose
      * automation was deleted).
      *
-     * @return array{message: string, buttonLabel: string, notFollowingMessage: string, unknownMessage: string}
+     * @return array{message: string, buttonLabel: string, notFollowingMessage: string, unknownMessage: string, confirmedMessage: string}
      */
     public static function configForSettings(array $settings = []): array
     {

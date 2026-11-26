@@ -1238,6 +1238,7 @@ class PanelController extends Controller
             'followGateButtonLabel' => (string) AppSetting::getValue('follow_gate_button_label', 'فالو کردم ✓'),
             'followGateNotFollowingMessage' => (string) AppSetting::getValue('follow_gate_not_following_message', 'هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.'),
             'followGateUnknownMessage' => (string) AppSetting::getValue('follow_gate_unknown_message', 'فعلاً وضعیت فالو قابل بررسی نیست. چند لحظه بعد دوباره روی «فالو کردم» بزن.'),
+            'followGateConfirmedMessage' => (string) AppSetting::getValue('follow_gate_confirmed_message', \App\Support\FollowGate::DEFAULT_CONFIRMED_MESSAGE),
 
             'selectedAccount' => $selected,
             'health' => $health,
@@ -1344,6 +1345,7 @@ class PanelController extends Controller
         AppSetting::setValue('follow_gate_button_label', trim((string) $r->input('follow_gate_button_label', 'فالو کردم ✓')));
         AppSetting::setValue('follow_gate_not_following_message', trim((string) $r->input('follow_gate_not_following_message', 'هنوز فالو کردن پیج برای من قابل تأیید نیست. لطفاً پیج رو فالو کن و دوباره روی «فالو کردم» بزن.')));
         AppSetting::setValue('follow_gate_unknown_message', trim((string) $r->input('follow_gate_unknown_message', 'فعلاً وضعیت فالو قابل بررسی نیست. چند لحظه بعد دوباره روی «فالو کردم» بزن.')));
+        AppSetting::setValue('follow_gate_confirmed_message', trim((string) $r->input('follow_gate_confirmed_message', \App\Support\FollowGate::DEFAULT_CONFIRMED_MESSAGE)));
 
         $hours = [];
         for ($i = 0; $i < 7; $i++) {

@@ -44,8 +44,20 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   if ($this->globalFollowGate($account,$data,$zernio,$event)) {
    $event->update(['status'=>'processed','processed_at'=>now()]); return;
   }
+  $this->runAutomations($account,$data,$event->event_id,$engine,$executor);
+  $event->update(['status'=>'processed','processed_at'=>now()]);
+ }
+
+ /**
+  * Run every matching active automation for an adapted payload.
+  *
+  * Returns true when at least one action actually delivered a response, so the
+  * follow-gate callback can decide whether a confirmation message is needed.
+  */
+ private function runAutomations(InstagramAccount $account,array $data,?string $eventId,AutomationEngine $engine,ActionExecutor $executor):bool {
   $automations=Automation::with(['keywords','actions','account'])->where('instagram_account_id',$account->id)->where('status','active')->orderBy('priority')->get();
   $trigger=(string)($data['trigger']??'');
+  $responded=false;
   foreach($automations as $a){
    // The panel is the only executor. A legacy row is still skipped only when a
    // native remote copy is known to exist; everything else runs locally.
@@ -54,17 +66,38 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
    if(!$a->hasTrigger($trigger))continue;
    $actions=$a->actionsForTrigger($trigger);
    if($actions->isEmpty())continue;
-   $target=$data['trigger']==='story_reply'?($data['story_id']??null):($data['post_id']??null);$context=$data+['target_id'=>$target,'event_id'=>$event->event_id];$eval=$engine->evaluate($a,$data['text']??'',$context);if(!$eval['pass']){$engine->log($a,$context,$eval,'not_matched');continue;}if(!empty($eval['gate_only'])){$gated=$executor->enforceFollowGate($a,$context);$engine->log($a,$context,$eval,$gated?'gated':'not_matched');if($gated)break;continue;}[$allowed,$reason]=$engine->canRun($a,$data['user_id']??null);if(!$allowed){$engine->log($a,$context,$eval,'blocked',$reason);continue;}$run=AutomationRun::create(['automation_id'=>$a->id,'event_id'=>$event->event_id,'status'=>'running','context'=>$context,'started_at'=>now()]);$results=[];foreach($actions as $action){
-    $result=$executor->execute($a,$action->toArray(),$context); $results[]=$result;
-    if(($result['status']??null)==='waiting_follow') break;
+   $target=$trigger==='story_reply'?($data['story_id']??null):($data['post_id']??null);
+   $context=$data+['target_id'=>$target,'event_id'=>$eventId];
+   $eval=$engine->evaluate($a,$data['text']??'',$context);
+   if(!$eval['pass']){$engine->log($a,$context,$eval,'not_matched');continue;}
+   if(!empty($eval['gate_only'])){
+    $gated=$executor->enforceFollowGate($a,$context);
+    $engine->log($a,$context,$eval,$gated?'gated':'not_matched');
+    if($gated)break;
+    continue;
+   }
+   [$allowed,$reason]=$engine->canRun($a,$data['user_id']??null);
+   if(!$allowed){$engine->log($a,$context,$eval,'blocked',$reason);continue;}
+   $run=AutomationRun::create(['automation_id'=>$a->id,'event_id'=>$eventId,'status'=>'running','context'=>$context,'started_at'=>now()]);
+   $results=[];
+   foreach($actions as $action){
+    $result=$executor->execute($a,$action->toArray(),$context);
+    $results[]=$result;
+    if(($result['status']??null)==='waiting_follow')break;
+    if(($result['status']??null)==='sent'&&in_array($result['action']??null,['public_reply','private_reply','direct_message'],true))$responded=true;
+   }
+   $waitingFollow=collect($results)->contains(fn($r)=>($r['status']??null)==='waiting_follow');
+   $failedAction=collect($results)->first(fn($r)=>($r['status']??null)==='failed');
+   $actionFailed=(bool)$failedAction;
+   if(!$waitingFollow&&!$actionFailed)$engine->markRun($a,$data['user_id']??null);
+   $run->update(['status'=>$waitingFollow?'pending':($actionFailed?'failed':'completed'),'result'=>$results,'error'=>$failedAction['error']??null,'finished_at'=>$waitingFollow?null:now()]);
+   $logStatus=$waitingFollow?'gated':($actionFailed?'failed':'executed');
+   $engine->log($a,$context,$eval,$logStatus,$failedAction['error']??null,$results);
+   if($waitingFollow)break;
   }
-  $waitingFollow=collect($results)->contains(fn($r)=>($r['status']??null)==='waiting_follow');
-  $failedAction=collect($results)->first(fn($r)=>($r['status']??null)==='failed');
-  $actionFailed=(bool)$failedAction;
-  if(!$waitingFollow && !$actionFailed)$engine->markRun($a,$data['user_id']??null);
-  $run->update(['status'=>$waitingFollow?'pending':($actionFailed?'failed':'completed'),'result'=>$results,'error'=>$failedAction['error']??null,'finished_at'=>$waitingFollow?null:now()]);
-  $logStatus=$waitingFollow?'gated':($actionFailed?'failed':'executed');
-  $engine->log($a,$context,$eval,$logStatus,$failedAction['error']??null,$results);if($waitingFollow)break;}$event->update(['status'=>'processed','processed_at'=>now()]);}
+  return $responded;
+ }
+
  /**
   * Check the follow relationship for every inbound DM when the general gate is
   * enabled. Returns true when the message must stop here (prompt sent, or the
@@ -199,33 +232,62 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
     $zernio->sendMessage($data['conversation_id'],$account->zernio_account_id,['message'=>$message,'buttons'=>[['type'=>'postback','title'=>mb_substr($label,0,20),'payload'=>'follow_gate:'.$pending['token']]]],(string)Str::uuid());
     return true;
   }
-  if(!$automation||$automation->status!=='active'){
-   // Global gate without a specific automation: confirmation is enough. Clear
-   // the pending marker so the next message is handled normally.
-   $metadata=is_array($contact->metadata)?$contact->metadata:[];unset($metadata['follow_gate_pending']);$contact->update(['metadata'=>$metadata,'is_follower'=>true]);
-   return true;
-  }
+  // The follow is confirmed: clear the marker first so a later failure cannot
+  // keep the contact stuck behind the gate.
+  $metadata=is_array($contact->metadata)?$contact->metadata:[];
+  unset($metadata['follow_gate_pending']);
+  $contact->update(['metadata'=>$metadata,'is_follower'=>true]);
+
   $context=is_array($pending['context']??null)?$pending['context']:[];
   $originalTrigger=(string)($context['trigger']??'');
   // The postback carries the live conversation/user data; the stored context
   // only holds the original event (which may have no conversation yet).
   $context=array_merge($context,$data);
   if($originalTrigger!=='')$context['trigger']=$originalTrigger;
-  $context['follow_gate_bypass']=true; $context['instagram_profile']['isFollower']=true;
-  $trigger=(string)($context['trigger']??'');
-  $actions=$automation->actionsForTrigger($trigger);
-  if($actions->isEmpty())return true;
-  [$allowed,$reason]=$engine->canRun($automation,$data['user_id']??null);
-  if(!$allowed){$engine->log($automation,$context,['keywords'=>['pass'=>true]],'blocked',$reason);return true;}
-  $results=[];
-  foreach($actions as $action){$result=$executor->execute($automation,$action->toArray(),$context);$results[]=$result;if(($result['status']??null)==='waiting_follow')break;}
-  if(!collect($results)->contains(fn($r)=>($r['status']??null)==='waiting_follow')){
-    $failedAction=collect($results)->first(fn($r)=>($r['status']??null)==='failed');
-    if(!$failedAction)$engine->markRun($automation,$data['user_id']??null);
-    $engine->log($automation,$context,['keywords'=>['pass'=>true]],$failedAction?'failed':'executed',$failedAction['error']??null,$results);
-    $metadata=is_array($contact->metadata)?$contact->metadata:[];unset($metadata['follow_gate_pending']);$contact->update(['metadata'=>$metadata,'is_follower'=>true]);
+  $context['follow_gate_bypass']=true;
+  $profile=is_array($context['instagram_profile']??null)?$context['instagram_profile']:[];
+  $context['instagram_profile']=array_merge($profile,['isFollower'=>true]);
+
+  // A per-automation gate resumes that automation only. The global gate runs
+  // before automation matching, so it stored no automation id: replay the
+  // original message through normal matching to answer what was asked.
+  $responded=$automation&&$automation->status==='active'
+   ?$this->resumeAutomation($automation,$context,$engine,$executor)
+   :$this->runAutomations($account,$context,$data['event_id']??null,$engine,$executor);
+
+  if(!$responded){
+   // Nothing to replay (no matching automation): confirm the follow and let
+   // the contact know a human will answer soon.
+   try{
+    $gate=$automation?FollowGate::config($automation):FollowGate::configForSettings([]);
+    $zernio->sendMessage($data['conversation_id'],$account->zernio_account_id,['message'=>$gate['confirmedMessage']],(string)Str::uuid());
+   }catch(\Throwable $e){
+    report($e);
+   }
   }
   return true;
+ }
+
+ /** Resume one automation after its own follow gate was confirmed. */
+ private function resumeAutomation(Automation $automation,array $context,AutomationEngine $engine,ActionExecutor $executor):bool {
+  $actions=$automation->actionsForTrigger((string)($context['trigger']??''));
+  if($actions->isEmpty())return false;
+  [$allowed,$reason]=$engine->canRun($automation,$context['user_id']??null);
+  if(!$allowed){$engine->log($automation,$context,['keywords'=>['pass'=>true]],'blocked',$reason);return false;}
+  $responded=false;
+  $results=[];
+  foreach($actions as $action){
+   $result=$executor->execute($automation,$action->toArray(),$context);
+   $results[]=$result;
+   if(($result['status']??null)==='waiting_follow')break;
+   if(($result['status']??null)==='sent'&&in_array($result['action']??null,['public_reply','private_reply','direct_message'],true))$responded=true;
+  }
+  // Still gated: keep quiet instead of pretending the follow was accepted.
+  if(collect($results)->contains(fn($r)=>($r['status']??null)==='waiting_follow'))return true;
+  $failedAction=collect($results)->first(fn($r)=>($r['status']??null)==='failed');
+  if(!$failedAction)$engine->markRun($automation,$context['user_id']??null);
+  $engine->log($automation,$context,['keywords'=>['pass'=>true]],$failedAction?'failed':'executed',$failedAction['error']??null,$results);
+  return $responded;
  }
 
  public function failed(\Throwable $e):void{WebhookEvent::whereKey($this->webhookEventId)->update(['status'=>'failed','error'=>$e->getMessage()]);}}
