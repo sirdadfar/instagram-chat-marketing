@@ -2,6 +2,7 @@
 @section('page_title','تنظیمات')
 @section('page_hint','اتصال حساب، ساعات کاری و رفتار کلی سیستم را مدیریت کن')
 @section('content')
+<style>.account-row-manage{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line,#e8eaf0)}.account-row-info{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.account-row-info small{color:var(--muted,#7b8190);overflow-wrap:anywhere}.account-delete-button{border:1px solid #efcaca;background:#fff5f5;color:#c0392b;border-radius:9px;padding:7px 11px;font:inherit;font-size:12px;cursor:pointer}.account-delete-button:hover{background:#fee2e2}</style>
 <div class="page-header-row"><div><div class="eyebrow">تنظیمات</div><h1>تنظیمات مرکز مدیریت</h1><p>تنظیمات عمومی را یک‌بار مشخص کن تا اتوماسیون‌ها از همان الگو استفاده کنند.</p></div></div>
 <div class="settings-grid settings-grid-pro">
 <div class="settings-main">
