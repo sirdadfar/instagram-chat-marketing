@@ -41,7 +41,7 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   }
   // General follow gate: when it is on, every inbound DM is checked, not only
   // messages that happen to match an automation keyword.
-  if ($this->globalFollowGate($account,$data,$zernio)) {
+  if ($this->globalFollowGate($account,$data,$zernio,$event)) {
    $event->update(['status'=>'processed','processed_at'=>now()]); return;
   }
   $automations=Automation::with(['keywords','actions','account'])->where('instagram_account_id',$account->id)->where('status','active')->orderBy('priority')->get();
@@ -68,17 +68,23 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   * enabled. Returns true when the message must stop here (prompt sent, or the
   * contact was already prompted within the last day).
   */
- private function globalFollowGate(InstagramAccount $account,array $data,ZernioClient $zernio):bool {
+ private function globalFollowGate(InstagramAccount $account,array $data,ZernioClient $zernio,WebhookEvent $event):bool {
   $trigger=(string)($data['trigger']??'');
   if(!in_array($trigger,['direct_message','story_reply'],true))return false;
   if(empty($data['user_id'])||empty($data['conversation_id']))return false;
-  if(!(bool)AppSetting::getValue('follow_gate_enabled',true))return false;
+  $gateMaster=(bool)AppSetting::getValue('follow_gate_enabled',true);
+  $gateWithoutKeywords=(bool)AppSetting::getValue('follow_gate_without_keywords',false);
+  if(!$gateMaster&&!$gateWithoutKeywords){
+   $this->noteFollowGate($event,['decision'=>'disabled','reason'=>'both general follow-gate switches are off']);
+   return false;
+  }
 
   $contact=Contact::where('instagram_account_id',$account->id)->where('external_user_id',(string)$data['user_id'])->first();
   $metadata=is_array($contact?->metadata)?$contact->metadata:[];
   $pending=$metadata['follow_gate_pending']??null;
   if(is_array($pending)&&!empty($pending['created_at'])&&\Illuminate\Support\Carbon::parse($pending['created_at'])->gt(now()->subDay())){
    // One prompt per contact per day; do not spam and do not run automations.
+   $this->noteFollowGate($event,['decision'=>'held','reason'=>'prompted within the last day']);
    return true;
   }
 
@@ -99,6 +105,7 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
     unset($metadata['follow_gate_pending']);
     $contact?->update(['metadata'=>$metadata,'is_follower'=>true]);
    }
+   $this->noteFollowGate($event,['decision'=>'skipped','reason'=>'already following']);
    return false;
   }
 
@@ -120,17 +127,27 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   );
   $contact->update(['metadata'=>$metadata]);
 
+  $this->noteFollowGate($event,['decision'=>'prompting','follow_status'=>$status,'message'=>$message]);
   try{
    $zernio->sendMessage($data['conversation_id'],$account->zernio_account_id,['message'=>$message,'buttons'=>$button],(string)Str::uuid());
+   $this->noteFollowGate($event,['decision'=>'prompted','follow_status'=>$status]);
   }catch(\Throwable $e){
    report($e);
    // A failed prompt must not hold the conversation forever.
    unset($metadata['follow_gate_pending']);
    $contact->update(['metadata'=>$metadata]);
+   $this->noteFollowGate($event,['decision'=>'send_failed','follow_status'=>$status,'error'=>$e->getMessage()]);
+   $event->update(['error'=>'follow_gate_send_failed: '.$e->getMessage()]);
    return false;
   }
 
   return true;
+ }
+
+ private function noteFollowGate(WebhookEvent $event,array $note):void {
+  $payload=is_array($event->payload)?$event->payload:[];
+  $payload['_follow_gate']=array_merge(['at'=>now()->toIso8601String()],$note);
+  $event->update(['payload'=>$payload]);
  }
 
  private function persistInbox(InstagramAccount $account,array $d):void {if(empty($d['conversation_id']))return;$contact=null;if(!empty($d['user_id'])){$profile=is_array($d['instagram_profile']??null)?$d['instagram_profile']:[];$status=FollowStatus::from($d['instagram_profile']??null);$attributes=['last_seen_at'=>now()];if(!empty($d['username']))$attributes['username']=$d['username'];if(!empty($d['full_name']))$attributes['full_name']=$d['full_name'];
