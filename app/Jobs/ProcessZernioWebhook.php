@@ -82,9 +82,15 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   $contact=Contact::where('instagram_account_id',$account->id)->where('external_user_id',(string)$data['user_id'])->first();
   $metadata=is_array($contact?->metadata)?$contact->metadata:[];
   $pending=$metadata['follow_gate_pending']??null;
-  if(is_array($pending)&&!empty($pending['created_at'])&&\Illuminate\Support\Carbon::parse($pending['created_at'])->gt(now()->subDay())){
-   // One prompt per contact per day; do not spam and do not run automations.
-   $this->noteFollowGate($event,['decision'=>'held','reason'=>'prompted within the last day']);
+  // Only the global gate's own prompt is allowed to suppress the next global
+  // prompt for a day. A pending marker left by a per-automation gate (or a
+  // failed attempt) must not silently swallow every DM.
+  $recentGlobalPending=is_array($pending)
+      &&($pending['scope']??null)==='global'
+      &&!empty($pending['created_at'])
+      &&\Illuminate\Support\Carbon::parse($pending['created_at'])->gt(now()->subDay());
+  if($recentGlobalPending){
+   $this->noteFollowGate($event,['decision'=>'held','reason'=>'global prompt sent within the last day','pending_scope'=>'global']);
    return true;
   }
 
