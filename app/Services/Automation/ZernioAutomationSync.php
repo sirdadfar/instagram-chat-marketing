@@ -47,6 +47,10 @@ final class ZernioAutomationSync
             throw new \RuntimeException('این نوع اتوماسیون از مسیر بومی پشتیبانی نمی‌شود.');
         }
 
+        if (! $automation->account) {
+            throw new \RuntimeException('حساب این اتوماسیون پیدا نشد؛ پیج را دوباره متصل کنید.');
+        }
+
         // Native comment automations accept exactly one trigger, and only a
         // single-trigger automation can reach this point.
         $trigger = $automation->primaryTrigger();
@@ -107,9 +111,33 @@ final class ZernioAutomationSync
             && (bool) AppSetting::getValue('follow_gate_without_keywords', false)
             && trim((string) $dmMessage) !== '';
 
+        // Zernio's comment-automation API requires the profile that owns the
+        // page. It is stored with the account during discovery; older rows need
+        // one lookup with the owner's key.
+        $profileId = trim((string) (data_get($automation->account->metadata, 'profileId')
+            ?? data_get($automation->account->metadata, 'profile._id')
+            ?? data_get($automation->account->metadata, 'profile.id')
+            ?? ''));
+        if ($profileId === '') {
+            try {
+                $listed = $this->client->listAccounts(['platform' => 'instagram']);
+                $items = data_get($listed, 'accounts', data_get($listed, 'data.accounts', data_get($listed, 'data', [])));
+                $match = collect(is_array($items) ? $items : [])->first(function ($row) use ($automation): bool {
+                    $id = $row['_id'] ?? $row['id'] ?? $row['accountId'] ?? null;
+
+                    return $id !== null && (string) $id === (string) $automation->account->zernio_account_id;
+                });
+                $profileId = trim((string) ($match['profileId'] ?? ''));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+        if ($profileId === '') {
+            throw new \RuntimeException('شناسه پروفایل زرنیو (profileId) این پیج پیدا نشد؛ پیج را با کلید مالک دوباره همگام‌سازی کنید.');
+        }
+
         $body = [
             'name' => $automation->name,
-            'accountId' => $automation->account->zernio_account_id,
             'trigger' => $trigger,
             'keywords' => $keywordlessGate ? [] : $keywords,
             'matchMode' => $matchMode,
@@ -234,8 +262,24 @@ final class ZernioAutomationSync
             ];
         }
 
-        return $automation->zernio_automation_id
-            ? $this->client->updateCommentAutomation($automation->zernio_automation_id, $body)
-            : $this->client->createCommentAutomation($body);
+        if ($automation->zernio_automation_id) {
+            try {
+                return $this->client->updateCommentAutomation($automation->zernio_automation_id, $body);
+            } catch (\Illuminate\Http\Client\RequestException $e) {
+                // A remote copy created with another user's key is invisible to
+                // the owner's key. Forget the stale id and create a fresh one.
+                if ($e->response?->status() !== 404) {
+                    throw $e;
+                }
+                $automation->forceFill(['zernio_automation_id' => null])->save();
+            }
+        }
+
+        // Only the create schema carries profileId/accountId; the PATCH schema
+        // refuses unknown fields on stricter API versions.
+        $body['profileId'] = $profileId;
+        $body['accountId'] = $automation->account->zernio_account_id;
+
+        return $this->client->createCommentAutomation($body);
     }
 }

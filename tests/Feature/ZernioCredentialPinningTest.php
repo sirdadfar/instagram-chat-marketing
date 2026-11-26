@@ -26,6 +26,7 @@ class ZernioCredentialPinningTest extends TestCase
             'zernio_account_id' => 'acc_tenant',
             'username' => 'tenant_page',
             'status' => 'active',
+            'metadata' => ['profileId' => 'profile_tenant'],
         ]);
 
         return [$user, $account];
