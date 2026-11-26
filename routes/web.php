@@ -59,6 +59,7 @@ Route::middleware('panel.auth')->group(function(){
  Route::post('/settings/ice-breakers',[PanelController::class,'iceBreakers'])->name('settings.ice-breakers');
  Route::post('/settings',[PanelController::class,'saveSettings'])->name('settings.save');
 Route::post('/settings/accounts/sync',[PanelController::class,'syncAccounts'])->name('settings.accounts.sync');
+ Route::delete('/settings/accounts/{account}',[PanelController::class,'destroyAccount'])->whereNumber('account')->name('settings.accounts.destroy');
  Route::get('/notifications',[PanelController::class,'notifications'])->name('notifications');
  Route::get('/contacts',[OperationsController::class,'contacts'])->name('contacts');
  Route::get('/templates',[OperationsController::class,'templates'])->name('templates');
