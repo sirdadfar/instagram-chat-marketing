@@ -87,10 +87,12 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   // failed attempt) must not silently swallow every DM.
   $recentGlobalPending=is_array($pending)
       &&($pending['scope']??null)==='global'
-      &&!empty($pending['created_at'])
-      &&\Illuminate\Support\Carbon::parse($pending['created_at'])->gt(now()->subDay());
+      // Only a confirmed delivery may suppress the next prompt. Older markers
+      // created before the send (or by a failed attempt) must not hold forever.
+      &&!empty($pending['sent_at'])
+      &&\Illuminate\Support\Carbon::parse($pending['sent_at'])->gt(now()->subDay());
   if($recentGlobalPending){
-   $this->noteFollowGate($event,['decision'=>'held','reason'=>'global prompt sent within the last day','pending_scope'=>'global']);
+   $this->noteFollowGate($event,['decision'=>'held','reason'=>'global prompt delivered within the last day','pending_scope'=>'global']);
    return true;
   }
 
@@ -126,6 +128,7 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
    'scope'=>'global',
    'context'=>array_filter($data,static fn($value)=>$value!==null),
    'created_at'=>now()->toIso8601String(),
+   'sent_at'=>null,
   ];
   $contact=Contact::updateOrCreate(
    ['instagram_account_id'=>$account->id,'external_user_id'=>(string)$data['user_id']],
@@ -136,6 +139,8 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   $this->noteFollowGate($event,['decision'=>'prompting','follow_status'=>$status,'message'=>$message]);
   try{
    $zernio->sendMessage($data['conversation_id'],$account->zernio_account_id,['message'=>$message,'buttons'=>$button],(string)Str::uuid());
+   $metadata['follow_gate_pending']['sent_at']=now()->toIso8601String();
+   $contact->update(['metadata'=>$metadata]);
    $this->noteFollowGate($event,['decision'=>'prompted','follow_status'=>$status]);
   }catch(\Throwable $e){
    report($e);
