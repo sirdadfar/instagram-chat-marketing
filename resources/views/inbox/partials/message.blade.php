@@ -12,5 +12,5 @@
 </div>
 @endif
 @if($isOut && $message->external_message_id)<div class="bubble-tools"><button type="button" class="reaction-button" data-react-message data-url="{{ route('inbox.message.react',[$conversation,$message->external_message_id]) }}" data-emoji="❤️">♡</button></div>@endif
-<div class="bubble-time">{{ $message->sent_at?->format('H:i') }}</div>
+<div class="bubble-time">{{ \App\Support\PersianText::digits($message->sent_at?->format('H:i') ?? '') }}</div>
 </div></div>

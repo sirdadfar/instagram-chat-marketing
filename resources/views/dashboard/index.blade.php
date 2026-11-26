@@ -10,7 +10,7 @@
 
 <div class="kpi-grid kpi-grid-premium">
 @foreach([['automation','اتوماسیون‌ها',$stats['automations'],'کل قوانین','✦'],['active','فعال',$stats['active'],'در حال اجرا','●'],['runs','اجراها',$stats['runs'],'کل اجراهای ثبت‌شده','↗'],['failed','خطاها',$stats['failed'],'نیازمند بررسی','!'],['human','پیگیری انسانی',$stats['human'],'گفتگوهای باز','◎']] as $k)
-<div class="kpi-card"><div class="kpi-icon kpi-{{ $k[0] }}">{{ $k[4] }}</div><div><span>{{ $k[1] }}</span><strong>{{ number_format($k[2]) }}</strong><small>{{ $k[3] }}</small></div></div>
+<div class="kpi-card"><div class="kpi-icon kpi-{{ $k[0] }}">{{ $k[4] }}</div><div><span>{{ $k[1] }}</span><strong>{{ \App\Support\PersianText::number($k[2]) }}</strong><small>{{ $k[3] }}</small></div></div>
 @endforeach
 </div>
 
@@ -18,18 +18,18 @@
 <section class="panel-card dashboard-section"><div class="section-head"><div><div class="eyebrow">گردش‌کارها</div><h2>اتوماسیون‌های اخیر</h2></div><a class="text-action" href="{{ route('automations.index') }}">همه <span>←</span></a></div><div class="dashboard-automation-list">
 @forelse($automations as $a)
 @php($tr=$a->primaryTrigger())
-<div class="dashboard-automation-row"><div class="row-avatar">{{ $tr==='comment'?'◎':($tr==='story_reply'?'◌':'↗') }}</div><div class="row-main"><strong>{{ $a->name }}</strong><small>{{ $a->account?->username ? '@'.$a->account->username : 'حساب' }} • اولویت {{ $a->priority }}</small></div><span class="status-badge {{ $a->status }}"><i></i>{{ $statusLabels[$a->status] ?? $a->status }}</span><div class="row-actions"><a class="quick-icon" href="{{ route('automations.edit',$a) }}">✎</a><button type="button" class="quick-icon" data-confirm-form="dashboard-delete-{{ $a->id }}">×</button><form id="dashboard-delete-{{ $a->id }}" method="POST" action="{{ route('automations.destroy',$a) }}" hidden>@csrf @method('DELETE')</form></div></div>
+<div class="dashboard-automation-row"><div class="row-avatar">{{ $tr==='comment'?'◎':($tr==='story_reply'?'◌':'↗') }}</div><div class="row-main"><strong>{{ $a->name }}</strong><small>{{ $a->account?->username ? '@'.$a->account->username : 'حساب' }} • اولویت {{ \App\Support\PersianText::digits($a->priority) }}</small></div><span class="status-badge {{ $a->status }}"><i></i>{{ $statusLabels[$a->status] ?? $a->status }}</span><div class="row-actions"><a class="quick-icon" href="{{ route('automations.edit',$a) }}" aria-label="ویرایش {{ $a->name }}" title="ویرایش">✎</a><button type="button" class="quick-icon" data-confirm-form="dashboard-delete-{{ $a->id }}" aria-label="حذف {{ $a->name }}" title="حذف">×</button><form id="dashboard-delete-{{ $a->id }}" method="POST" action="{{ route('automations.destroy',$a) }}" hidden>@csrf @method('DELETE')</form></div></div>
 @empty<div class="empty-state"><div class="empty-icon">✦</div><strong>هنوز اتوماسیونی نداری</strong><p>از یک الگوی ساده شروع کن.</p></div>@endforelse
 </div></section>
 
 <section class="panel-card dashboard-section"><div class="section-head"><div><div class="eyebrow">گفتگو</div><h2>آخرین مکالمه‌ها</h2></div><a class="text-action" href="{{ route('inbox') }}">صندوق گفتگو <span>←</span></a></div><div class="conversation-list-dashboard">
 @forelse($conversations as $conversation)
-<div class="conversation-row"><div class="avatar-photo">{{ mb_strtoupper(mb_substr($conversation->contact?->username ?: 'IG',0,2)) }}</div><div class="row-main"><strong>{{ '@'.($conversation->contact?->username ?: 'مخاطب') }}</strong><small>{{ Str::limit($conversation->messages->first()?->text ?: 'رسانه',70) }}</small></div><div class="row-time">{{ $conversation->last_message_at?->diffForHumans() }}</div>@if($conversation->needs_human)<span class="priority-dot" title="نیازمند پیگیری"></span>@endif</div>
+<div class="conversation-row"><div class="avatar-photo">{{ mb_strtoupper(mb_substr($conversation->contact?->username ?: 'IG',0,2)) }}</div><div class="row-main"><strong>{{ '@'.($conversation->contact?->username ?: 'مخاطب') }}</strong><small>{{ Str::limit($conversation->messages->first()?->text ?: 'رسانه',70) }}</small></div><div class="row-time">{{ \App\Support\PersianText::relative($conversation->last_message_at) }}</div>@if($conversation->needs_human)<span class="priority-dot" title="نیازمند پیگیری"></span>@endif</div>
 @empty<div class="empty-state"><strong>گفتگویی ثبت نشده</strong><p>وقتی پیام جدیدی برسد، اینجا نمایش داده می‌شود.</p></div>@endforelse
 </div></section>
 
 <section class="panel-card dashboard-section wide"><div class="section-head"><div><div class="eyebrow">رویدادها</div><h2>آخرین فعالیت</h2></div><a class="text-action" href="{{ route('logs') }}">مشاهده رویدادها <span>←</span></a></div><div class="event-timeline">
-@forelse($events as $event)<div class="event-line"><span class="event-dot"></span><div><strong>{{ $event->event_type }}</strong><small>{{ $event->created_at?->diffForHumans() }} • {{ $event->status }}</small></div><code>{{ substr((string)$event->event_id,0,18) }}</code></div>@empty<div class="empty-state"><strong>رویدادی وجود ندارد</strong></div>@endforelse
+@forelse($events as $event)<div class="event-line"><span class="event-dot"></span><div><strong>{{ \App\Support\PersianText::eventLabel($event->event_type) }}</strong><small>{{ \App\Support\PersianText::relative($event->created_at) }} • {{ \App\Support\PersianText::statusLabel($event->status) }}</small></div><code>{{ \App\Support\PersianText::digits(substr((string) $event->event_id, 0, 12)) }}</code></div>@empty<div class="empty-state"><strong>رویدادی وجود ندارد</strong></div>@endforelse
 </div></section>
 </div>
 @endsection

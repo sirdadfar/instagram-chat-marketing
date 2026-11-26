@@ -34,7 +34,7 @@
 
         <div class="workspace-card">
             <div class="workspace-avatar">پنل</div>
-            <div class="workspace-copy"><strong>فضای کاری</strong><span>{{ $layoutAccountCount }} حساب فعال</span></div>
+            <div class="workspace-copy"><strong>فضای کاری</strong><span>{{ \App\Support\PersianText::number($layoutAccountCount) }} حساب فعال</span></div>
             <span class="online-dot" title="فعال"></span>
         </div>
 
@@ -43,10 +43,10 @@
             <a class="nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}" {{ request()->routeIs('dashboard') ? 'aria-current="page"' : '' }} href="{{ route('dashboard') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zM14 20h6v-9h-6zM14 9h6V4h-6zM4 20h6v-3H4z"/></svg></span><span>داشبورد</span></a>
 
             <div class="nav-label nav-label-gap">عملیات</div>
-            <a class="nav-item {{ request()->routeIs('automations.*') ? 'active' : '' }}" {{ request()->routeIs('automations.*') ? 'aria-current="page"' : '' }} href="{{ route('automations.index') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M13 2 3.5 13H11l-1 9 9.5-11H13z"/></svg></span><span>اتوماسیون‌ها</span><em>{{ $layoutActiveAutomationCount }}</em></a>
+            <a class="nav-item {{ request()->routeIs('automations.*') ? 'active' : '' }}" {{ request()->routeIs('automations.*') ? 'aria-current="page"' : '' }} href="{{ route('automations.index') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M13 2 3.5 13H11l-1 9 9.5-11H13z"/></svg></span><span>اتوماسیون‌ها</span><em>{{ \App\Support\PersianText::digits($layoutActiveAutomationCount) }}</em></a>
             <a class="nav-item {{ request()->routeIs('content*') ? 'active' : '' }}" {{ request()->routeIs('content*') ? 'aria-current="page"' : '' }} href="{{ route('content') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.5"/><path d="m5 17 4-4 3 3 2-2 5 5"/></svg></span><span>محتوا</span></a>
             <a class="nav-item {{ request()->routeIs('contacts') ? 'active' : '' }}" {{ request()->routeIs('contacts') ? 'aria-current="page"' : '' }} href="{{ route('contacts') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="9.5" cy="7" r="3"/><path d="M16 4.5a3 3 0 0 1 0 5.9M19 20v-1a4 4 0 0 0-3-3.9"/></svg></span><span>مخاطبان</span></a>
-            <a class="nav-item {{ request()->routeIs('inbox*') ? 'active' : '' }}" {{ request()->routeIs('inbox*') ? 'aria-current="page"' : '' }} href="{{ route('inbox') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H7l-3 3z"/><path d="M8 9h8M8 12h5"/></svg></span><span>گفتگوها</span><em class="nav-count-danger">{{ $layoutHumanConversationCount }}</em></a>
+            <a class="nav-item {{ request()->routeIs('inbox*') ? 'active' : '' }}" {{ request()->routeIs('inbox*') ? 'aria-current="page"' : '' }} href="{{ route('inbox') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H7l-3 3z"/><path d="M8 9h8M8 12h5"/></svg></span><span>گفتگوها</span><em class="nav-count-danger">{{ \App\Support\PersianText::digits($layoutHumanConversationCount) }}</em></a>
             <a class="nav-item {{ request()->routeIs('comments*') ? 'active' : '' }}" {{ request()->routeIs('comments*') ? 'aria-current="page"' : '' }} href="{{ route('comments') }}"><span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H8l-3 3z"/><path d="M8 9h8M8 12h5"/></svg></span><span>نظرات</span></a>
 
             <div class="nav-label nav-label-gap">گزارش و تنظیمات</div>

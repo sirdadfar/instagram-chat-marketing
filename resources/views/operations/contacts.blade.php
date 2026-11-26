@@ -15,7 +15,7 @@
 @forelse($contacts as $contact)
 <div class="event-row">
     <div class="avatar-photo avatar-photo-lg">{{ mb_strtoupper(mb_substr($contact->username ?: 'IG',0,2)) }}</div>
-    <div class="row-main"><strong>{{ '@'.($contact->username ?: 'مخاطب') }}</strong><small>{{ $contact->full_name ?: 'نام ثبت نشده' }} · آخرین فعالیت {{ $contact->last_seen_at?->diffForHumans() ?: 'نامشخص' }}</small></div>
+    <div class="row-main"><strong>{{ '@'.($contact->username ?: 'مخاطب') }}</strong><small>{{ $contact->full_name ?: 'نام ثبت نشده' }} · آخرین فعالیت {{ \App\Support\PersianText::relative($contact->last_seen_at) }}</small></div>
     <span class="soft-tag">{{ $contact->is_follower ? 'فالوور' : 'غیرفالوور' }}</span>
     @if($contact->needs_human)<span class="status-badge paused"><i></i>پیگیری</span>@endif
     <div>@foreach($contact->tags->take(3) as $tag)<span class="soft-tag">{{ $tag->name }}</span>@endforeach</div>

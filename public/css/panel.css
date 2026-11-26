@@ -2288,3 +2288,114 @@ iframe,video{border:0}
   .automation-switch{width:44px;height:38px}
   .automation-search input{font-size:16px}
 }
+
+/* ---------- 33. UI polish: pagination, analytics, inbox & mobile ---------- */
+/* Persian pagination (resources/views/vendor/pagination/tailwind.blade.php) */
+.pagination-wrap .panel-pagination{display:flex;flex-direction:column;align-items:center;gap:10px}
+.panel-pagination .pagination-summary{margin:0;color:var(--muted);font-size:12.5px}
+.panel-pagination .pagination-links{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;max-width:100%}
+.panel-pagination .page-btn{
+  display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:38px;padding:0 12px;
+  border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--ink);
+  font-size:12.5px;font-weight:800;text-decoration:none;transition:background .16s ease,border-color .16s ease,color .16s ease;
+}
+.panel-pagination a.page-btn:hover{background:var(--surface-2);border-color:var(--line-strong)}
+.panel-pagination .page-btn.is-active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 6px 14px rgba(210,53,108,.24)}
+.panel-pagination .page-btn.is-disabled{opacity:.42;cursor:default}
+.panel-pagination .page-ellipsis{min-width:20px;text-align:center;color:var(--subtle);font-weight:800}
+
+/* Selects inside shell fill the whole tap area */
+.select-shell select{height:100%;padding:0;margin:0}
+
+/* Dashboard lists: long previews must truncate inside the card instead of widening the grid */
+.dashboard-automation-list,.conversation-list-dashboard,.event-timeline{grid-template-columns:minmax(0,1fr)}
+.conversation-row,.dashboard-automation-row{min-width:0}
+
+/* Analytics: keep cards content-sized and charts readable */
+.analytics-grid-pro{align-items:start}
+.analytics-chart{direction:ltr}
+.analytics-chart .chart-col{min-width:34px;flex:1 1 0}
+.analytics-chart .chart-col>span{direction:ltr;white-space:nowrap}
+.analytics-chart .chart-value{direction:ltr}
+.analytics-chart .chart-bar-wrap{height:132px;min-height:132px}
+.analytics-chart .empty-state{flex:1 1 100%;text-align:center}
+/* Demographics: long country/city lists scroll inside their card */
+.demo-card{display:flex;flex-direction:column;min-height:0}
+.demo-list{max-height:252px;overflow:auto;padding-inline-end:3px;scrollbar-width:thin}
+.demo-list div{flex:none}
+
+/* Inbox: app-like height on desktop so the list scrolls instead of stretching the page */
+@media (min-width:981px){
+  .inbox-shell{height:clamp(560px,calc(100vh - 300px),820px);min-height:0}
+  .inbox-empty-preview{align-content:center;height:100%}
+}
+
+@media (max-width:700px){
+  /* Keep dense grids two-up instead of one long column */
+  .kpi-grid.kpi-grid-premium{grid-template-columns:1fr 1fr;gap:9px}
+  .analytics-kpi-grid{grid-template-columns:1fr 1fr;gap:9px}
+  .analytics-kpi{min-height:112px;padding:13px}
+  .analytics-kpi strong{font-size:22px!important}
+  .automation-stats{grid-template-columns:1fr 1fr}
+  .automation-stat{padding:13px}
+  .monitor-grid{grid-template-columns:1fr 1fr;gap:9px}
+  .monitor-grid .monitor-card:last-child{grid-column:1/-1}
+  .automation-tab{min-height:40px}
+  .automation-search input{min-height:44px}
+  .automation-search button{min-height:34px}
+  .automation-sort{height:44px}
+  .automation-view-toggle button{width:40px;height:38px}
+
+  /* Analytics chart: newest points only, readable columns */
+  .analytics-chart{gap:5px;padding:2px 0 8px;min-height:0}
+  .analytics-chart .chart-col{min-width:34px}
+  .analytics-chart .chart-col:not(:nth-last-child(-n+8)){display:none}
+  .analytics-chart .chart-bar-wrap{height:110px;min-height:110px}
+
+  /* Inbox on mobile: list is the primary view */
+  .inbox-shell{min-height:0;height:auto}
+  .inbox-empty-preview{display:none}
+  .inbox-list-panel{max-height:min(62vh,520px)}
+  .inbox-row{padding:12px 13px}
+  .row-time{font-size:11px}
+
+  /* Content cards: calmer text and comfortable actions */
+  .media-card-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .media-card-actions .soft-button{min-height:38px;font-size:12px;padding:0 8px}
+  .media-card-body p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.7}
+  .media-card-cover img,.media-card-cover video{aspect-ratio:1/1}
+  .media-card-story .media-card-cover img{aspect-ratio:9/16}
+  .content-masonry{columns:2 150px;column-gap:9px}
+
+  /* Automation studio */
+  .progress-item b{display:block;font-size:10px;line-height:1.2;font-weight:700}
+  .progress-item span{width:26px;height:26px;font-size:11px}
+  .progress-item{min-height:38px}
+  .back-link{min-height:36px;display:inline-flex;align-items:center}
+  .automation-search button{min-height:34px}
+  .studio-progress{gap:6px;justify-content:space-between}
+  .studio-progress>i{min-width:8px;width:8px}
+  .chat-area{min-height:200px}
+  .phone-screen{max-width:280px}
+
+  /* Declutter lists */
+  .event-line code{display:none}
+  .select-shell{height:44px}
+  .round-glass,.quick-icon{min-width:36px;min-height:36px}
+  .row-actions .quick-icon{width:40px;height:40px}
+
+  /* Hero headers */
+  .analytics-hero,.health-hero{gap:12px;padding:18px 16px}
+  .analytics-hero-mark,.health-shield{width:44px;height:44px;border-radius:13px;font-size:20px}
+  .analytics-hero>div:nth-child(2),.health-hero-copy{flex:1 1 190px;min-width:0}
+  .panel-pagination .pagination-links{gap:4px}
+  .panel-pagination .page-btn{height:40px;min-width:38px;padding:0 10px;font-size:12px}
+  .kpi-grid-premium .kpi-card:last-child{grid-column:1/-1}
+}
+
+@media (max-width:430px){
+  .page-content{padding-inline:11px}
+  .kpi-grid.kpi-grid-premium{grid-template-columns:1fr 1fr}
+  .content-masonry{columns:2 140px}
+  .side-action-grid{grid-template-columns:1fr 1fr}
+}

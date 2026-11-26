@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   prompt has its own message.
 
 ### Fixed
+- Persian UI polish: relative times, event/status labels and counters are now
+  localized with Persian digits instead of raw Carbon/API strings.
+- Pagination is RTL and Persian (`قبل`/`بعد`, «نمایش X تا Y از Z») with
+  comfortable tap targets.
+- Analytics: follower bars now use the real value (they rendered as thin
+  lines), long demographics lists scroll inside their card, and the audience
+  panel no longer stretches the page into empty columns.
+- Inbox keeps a fixed, scrollable height on desktop; the empty conversation
+  preview is hidden on phones so the list is the primary view.
+- Mobile layout: two-column KPI/stat grids, compact content cards with
+  two-line captions, readable automation step labels and larger toolbar tap
+  targets.
 - A missing/unknown Instagram follow status is no longer treated as
   "not a follower", so followers are not asked to follow again when the
   status check fails or returns `consent_required`.
