@@ -80,7 +80,7 @@ final class ZernioAutomationSync
 
         foreach ($automation->actions->sortBy('sort_order') as $action) {
             $config = is_array($action->config) ? $action->config : [];
-            $message = trim((string) ($config['message'] ?? ''));
+            $message = $this->text($config['message'] ?? null);
 
             if (in_array($action->action, ['private_reply', 'direct_message'], true)) {
                 $dmMessage = $message;
@@ -99,7 +99,7 @@ final class ZernioAutomationSync
             }
         }
 
-        $matchMode = (string) ($settings['matchMode'] ?? $automation->match_mode ?? 'contains');
+        $matchMode = $this->text($settings['matchMode'] ?? $automation->match_mode ?? 'contains');
         if (! in_array($matchMode, ['exact', 'contains', 'word'], true)) {
             $matchMode = 'contains';
         }
@@ -123,21 +123,22 @@ final class ZernioAutomationSync
 
                 return $id !== null && (string) $id === (string) $automation->account->zernio_account_id;
             });
-            $profileId = trim((string) ($match['profileId'] ?? ''));
+            $profileId = $this->profileIdFrom($match['profileId'] ?? null);
         } catch (\Throwable $e) {
             report($e);
         }
         if ($profileId === '') {
-            $profileId = trim((string) (data_get($automation->account->metadata, 'profileId')
+            $profileId = $this->profileIdFrom(
+                data_get($automation->account->metadata, 'profileId')
                 ?? data_get($automation->account->metadata, 'profile._id')
                 ?? data_get($automation->account->metadata, 'profile.id')
-                ?? ''));
+            );
         }
         if ($profileId === '') {
             throw new \RuntimeException('شناسه پروفایل زرنیو (profileId) این پیج پیدا نشد؛ پیج را با کلید مالک دوباره همگام‌سازی کنید.');
         }
         $metadata = is_array($automation->account->metadata) ? $automation->account->metadata : [];
-        if ((string) ($metadata['profileId'] ?? '') !== $profileId) {
+        if ($this->profileIdFrom($metadata['profileId'] ?? null) !== $profileId) {
             $automation->account->update(['metadata' => array_merge($metadata, ['profileId' => $profileId])]);
         }
 
@@ -176,26 +177,26 @@ final class ZernioAutomationSync
         $linkTracking = (bool) ($settings['linkTracking'] ?? false);
         $body['linkTracking'] = $linkTracking;
         if ($linkTracking && ! empty($settings['clickTag'])) {
-            $body['clickTag'] = trim((string) $settings['clickTag']);
+            $body['clickTag'] = $this->text($settings['clickTag']);
         }
 
         // The platform accepts either flat buttons, quick replies or a generic template.
         // During an update we explicitly clear the previous mutually-exclusive content.
         $buttons = array_values(array_filter(array_map(
-            static function ($button): ?array {
+            function ($button): ?array {
                 if (!is_array($button)) {
                     return null;
                 }
 
-                $type = (string) ($button['type'] ?? '');
-                $title = trim((string) ($button['title'] ?? ''));
+                $type = $this->text($button['type'] ?? null);
+                $title = $this->text($button['title'] ?? null);
 
                 if ($title === '' || mb_strlen($title) > 20) {
                     return null;
                 }
 
                 if ($type === 'url') {
-                    $url = trim((string) ($button['url'] ?? ''));
+                    $url = $this->text($button['url'] ?? null);
                     if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
                         return null;
                     }
@@ -204,7 +205,7 @@ final class ZernioAutomationSync
                 }
 
                 if ($type === 'postback') {
-                    $payload = trim((string) ($button['payload'] ?? ''));
+                    $payload = $this->text($button['payload'] ?? null);
                     if ($payload === '') {
                         return null;
                     }
@@ -286,5 +287,24 @@ final class ZernioAutomationSync
         $body['accountId'] = $automation->account->zernio_account_id;
 
         return $this->client->createCommentAutomation($body);
+    }
+
+    /**
+     * Zernio may return a profile as an id string or as an object such as
+     * `{ "_id": "..." }`. Casting the object straight to string raises
+     * "Array to string conversion" and aborted the whole sync.
+     */
+    private function profileIdFrom(mixed $value): string
+    {
+        if (is_array($value)) {
+            $value = $value['_id'] ?? $value['id'] ?? $value['profileId'] ?? null;
+        }
+
+        return is_scalar($value) ? trim((string) $value) : '';
+    }
+
+    private function text(mixed $value): string
+    {
+        return is_scalar($value) ? trim((string) $value) : '';
     }
 }

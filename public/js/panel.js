@@ -471,7 +471,7 @@
             const hasComment=triggers.includes('comment'),hasStory=triggers.includes('story_reply'),hasDirect=triggers.includes('direct_message');
             const multi=triggers.length>1,isDirect=triggers.length===1&&hasDirect,isPublic=hasComment&&goal==='comment_public';
             const goalSection=qs('#goalSection',createForm), publicWrap=qs('#publicReplyWrap',createForm), privateWrap=qs('#privateReplyWrap',createForm), mediaStep=qs('#mediaStep',createForm);
-            const execution=qs('#executionModeField',createForm); if(execution) execution.value=triggers.length===1&&!isDirect?'zernio':'local';
+            const execution=qs('#executionModeField',createForm); if(execution) execution.value='local';
             const gateCard=qs('#followGateCard',createForm), gate=qs('#followGateEnabled',createForm);
             // The gate is available whenever a direct message will be sent.
             const gateRelevant=(hasComment&&!isPublic)||hasStory||hasDirect;

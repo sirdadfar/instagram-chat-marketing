@@ -5,7 +5,7 @@
 <form method="POST" action="{{ route('automations.store') }}" id="automationCreateForm" class="automation-studio" novalidate>
 @csrf
 <input type="hidden" name="status" value="active">
-<input type="hidden" name="execution_mode" id="executionModeField" value="zernio">
+<input type="hidden" name="execution_mode" id="executionModeField" value="local">
 <input type="hidden" name="business_hours_only" value="0">
 <input type="hidden" name="handoff_enabled" value="0">
 <input type="hidden" name="target_type" id="targetTypeField" value="post">

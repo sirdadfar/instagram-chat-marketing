@@ -1,14 +1,52 @@
 <?php
+
 namespace App\Console\Commands;
-use Illuminate\Console\Command;
+
 use App\Models\Automation;
 use App\Services\Automation\ZernioAutomationSync;
-class SyncZernioAutomation extends Command {
- protected $signature='zernio:sync-automation {automationId}';
- protected $description='Sync one automation to Zernio native Comment Automation';
- public function handle(ZernioAutomationSync $sync):int {
-  $a=Automation::with(['keywords','actions','account'])->find($this->argument('automationId'));
-  if(!$a){$this->error('Automation not found.');return self::FAILURE;}
-  try{$r=$sync->sync($a);$remote=data_get($r,'automation.id')??data_get($r,'data.id')??data_get($r,'id');if($remote)$a->update(['zernio_automation_id'=>$remote]);$this->line(json_encode($r,JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES));return self::SUCCESS;}catch(\Throwable $e){$this->error($e->getMessage());return self::FAILURE;}
- }
+use Illuminate\Console\Command;
+
+class SyncZernioAutomation extends Command
+{
+    protected $signature = 'zernio:sync-automation {automationId}';
+
+    protected $description = 'Retire the native Zernio copy of one automation; the panel runs it locally';
+
+    public function handle(ZernioAutomationSync $sync): int
+    {
+        $automation = Automation::with('account')->find($this->argument('automationId'));
+
+        if (! $automation) {
+            $this->error('Automation not found.');
+
+            return self::FAILURE;
+        }
+
+        if ($automation->zernio_automation_id) {
+            try {
+                $sync->disable($automation);
+            } catch (\Throwable $e) {
+                report($e);
+                $this->error('The native copy could not be disabled: '.$e->getMessage());
+
+                return self::FAILURE;
+            }
+
+            $automation->forceFill(['zernio_automation_id' => null])->save();
+            $this->info('Native Zernio copy disabled.');
+        }
+
+        $settings = is_array($automation->settings) ? $automation->settings : [];
+        unset($settings['nativeSyncError'], $settings['nativeSyncFailedAt']);
+        $settings['nativeSyncRetiredAt'] = now()->toIso8601String();
+
+        $automation->forceFill([
+            'execution_mode' => 'local',
+            'settings' => $settings,
+        ])->save();
+
+        $this->info('Automation now runs in the panel\'s local engine.');
+
+        return self::SUCCESS;
+    }
 }

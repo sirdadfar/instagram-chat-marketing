@@ -112,6 +112,9 @@ jobs:
           composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
           php artisan migrate --force
           php artisan panel:adopt-legacy || true
+          # The panel answers every automation itself; disable any native copy
+          # left behind by older releases so the same comment is not answered twice.
+          php artisan zernio:retire-native || true
           php artisan optimize:clear
           php artisan config:cache
           php artisan route:cache

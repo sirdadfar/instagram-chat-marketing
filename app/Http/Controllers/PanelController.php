@@ -612,7 +612,7 @@ class PanelController extends Controller
         ]);
         $audit->record('automation.created', Automation::class, $a->id, null, $a->toArray());
 
-        $this->syncNativeAutomation($a);
+        $this->retireNativeAutomation($a);
 
         return redirect()
             ->route('automations.edit', $a)
@@ -763,39 +763,23 @@ class PanelController extends Controller
             $automation->toArray()
         );
 
-        $this->syncNativeAutomation($automation);
+        $this->retireNativeAutomation($automation);
 
         return back()->with('success', 'تغییرات ذخیره شد و نسخه جدید اتوماسیون ثبت شد.');
     }
 
-    public function toggle(Automation $automation, ZernioAutomationSync $nativeSync)
+    public function toggle(Automation $automation)
     {
         $this->authorizeAutomation($automation);
-        $previous = $automation->status;
         $automation->update([
             'status' => $automation->status === 'active' ? 'paused' : 'active',
         ]);
 
         $automation->refresh();
-        if ($automation->supportsNativeSync()) {
-            try {
-                $automation->load(['keywords', 'actions', 'account']);
-                $response = $nativeSync->sync($automation);
-                $remoteId = data_get($response, 'id', data_get($response, '_id', data_get($response, 'commentAutomationId')));
-                if ($remoteId && ! $automation->zernio_automation_id) {
-                    $automation->update(['zernio_automation_id' => (string) $remoteId]);
-                }
-            } catch (\Throwable $e) {
-                $reason = \Illuminate\Support\Str::limit(trim($e->getMessage()), 500);
-                $settings = is_array($automation->settings) ? $automation->settings : [];
-                $settings['nativeSyncError'] = $reason !== '' ? $reason : 'خطای نامشخص در همگام‌سازی با زرنیو';
-                $settings['nativeSyncFailedAt'] = now()->toIso8601String();
-
-                $automation->update(['status' => $previous, 'settings' => $settings]);
-                report($e);
-                return back()->withErrors(['automation' => 'وضعیت اتوماسیون ذخیره نشد. علت: '.$settings['nativeSyncError']]);
-            }
-        }
+        // The panel answers every event itself. Re-enabling (or pausing) an
+        // automation also retires any legacy native copy so Zernio cannot send
+        // a second reply.
+        $this->retireNativeAutomation($automation);
 
         return back()->with('success', $automation->status === 'active' ? 'اتوماسیون فعال شد.' : 'اتوماسیون متوقف شد.');
     }
@@ -1296,7 +1280,7 @@ class PanelController extends Controller
         }
     }
 
-    public function saveSettings(Request $r, ZernioAutomationSync $nativeSync)
+    public function saveSettings(Request $r)
     {
         // A) Personal service-key card: mandatory key page. Validating and
         // storing the key must not touch (or wipe) the general settings below.
@@ -1372,50 +1356,15 @@ class PanelController extends Controller
 
         AppSetting::setValue('business_hours', $hours);
 
-        // Re-sync only the automations this user can see. Previously every tenant's
-        // automations were re-pushed using the session user's key, which leaked
-        // across accounts and could overwrite another page owner's configuration.
-        $syncFailures = [];
-        Automation::with(['keywords','actions','account'])
+        // Native Zernio automations are retired: every rule runs inside the
+        // panel so custom actions and the follow gate stay under our control.
+        // Saving settings also cleans up remote copies left by older versions.
+        Automation::with('account')
             ->whereIn('id', Tenancy::visibleAutomationIds())
-            ->whereIn('trigger', ['comment','story_reply'])
-            ->where('status', 'active')
             ->get()
-            ->filter(fn (Automation $automation): bool => $automation->supportsNativeSync())
-            ->each(function (Automation $automation) use ($nativeSync, &$syncFailures): void {
-                try {
-                    $response = $nativeSync->sync($automation);
-                    $remoteId = data_get($response, 'id', data_get($response, '_id', data_get($response, 'commentAutomationId')));
+            ->each(fn (Automation $automation) => $this->retireNativeAutomation($automation));
 
-                    // Legacy comment/story automations that used to run locally must
-                    // switch to the native path, otherwise the follow gate (including
-                    // the keyword-less option) never reaches Instagram.
-                    if ($remoteId) {
-                        $automation->update([
-                            'zernio_automation_id' => (string) $remoteId,
-                            'execution_mode' => 'zernio',
-                        ]);
-                    }
-                } catch (\Throwable $e) {
-                    $reason = \Illuminate\Support\Str::limit(trim($e->getMessage()), 500);
-                    $settings = is_array($automation->settings) ? $automation->settings : [];
-                    $settings['nativeSyncError'] = $reason !== '' ? $reason : 'خطای نامشخص در همگام‌سازی با زرنیو';
-                    $settings['nativeSyncFailedAt'] = now()->toIso8601String();
-
-                    $automation->update(['status' => 'paused', 'settings' => $settings]);
-                    $syncFailures[] = $automation->name.' ('.$settings['nativeSyncError'].')';
-                    report($e);
-                }
-            });
-
-        $response = back()->with('success', 'تنظیمات با موفقیت ذخیره شد.');
-        if ($syncFailures !== []) {
-            $response->withErrors([
-                'automation' => 'همگام‌سازی این اتوماسیون‌ها انجام نشد و متوقف شدند: '.implode('، ', array_slice($syncFailures, 0, 3)),
-            ]);
-        }
-
-        return $response;
+        return back()->with('success', 'تنظیمات با موفقیت ذخیره شد.');
     }
 
     public function notifications()
@@ -1616,56 +1565,50 @@ class PanelController extends Controller
         };
     }
 
-    private function syncNativeAutomation(Automation $automation): void
+    /**
+     * Keep every automation on the local engine.
+     *
+     * The panel owns the reply flow (custom actions, follow gate, rate limits),
+     * so Zernio must not run a second native copy. This clears a legacy sync
+     * error and best-effort disables a remote copy created by older versions.
+     */
+    private function retireNativeAutomation(Automation $automation): void
     {
-        // A multi-trigger automation runs entirely in the local engine. If it
-        // used to be native, pause the remote copy so comments are not answered
-        // twice.
-        if (! $automation->supportsNativeSync()) {
-            if ($automation->zernio_automation_id) {
-                try {
-                    app(ZernioAutomationSync::class)->disable($automation);
-                } catch (\Throwable $e) {
-                    report($e);
-                }
+        if ($automation->zernio_automation_id) {
+            try {
+                app(ZernioAutomationSync::class)->disable($automation);
                 $automation->forceFill(['zernio_automation_id' => null])->save();
-            }
+            } catch (\Throwable $e) {
+                report($e);
+                // Never run the local engine while the remote copy may still
+                // answer, otherwise the same comment gets two replies.
+                if ($automation->execution_mode !== 'zernio') {
+                    $automation->forceFill(['execution_mode' => 'zernio'])->save();
+                }
+                session()->flash('warning', 'نسخه بومی قدیمی این اتوماسیون در زرنیو هنوز متوقف نشده است؛ برای جلوگیری از پاسخ تکراری، یک‌بار دیگر ذخیره یا وضعیت را تغییر بده.');
 
-            return;
-        }
-
-        try {
-            $automation->load(['keywords', 'actions', 'account']);
-            $response = app(ZernioAutomationSync::class)->sync($automation);
-            $remoteId = data_get($response, 'id', data_get($response, '_id', data_get($response, 'commentAutomationId')));
-            if ($remoteId) {
-                $settings = is_array($automation->settings) ? $automation->settings : [];
-                unset($settings['nativeSyncError'], $settings['nativeSyncFailedAt']);
-                $settings['nativeSyncedAt'] = now()->toIso8601String();
-
-                $automation->update([
-                    'zernio_automation_id' => (string) $remoteId,
-                    'execution_mode' => 'zernio',
-                    'settings' => $settings,
-                ]);
                 return;
             }
+        }
 
-            if ($automation->status === 'active') {
-                throw new \RuntimeException('شناسه اتوماسیون خارجی از سرویس دریافت نشد.');
-            }
-        } catch (\Throwable $e) {
-            report($e);
+        $settings = is_array($automation->settings) ? $automation->settings : [];
+        $settingsChanged = false;
 
-            // Keep the failure on the automation so the edit screen can explain
-            // why it was paused instead of silently flipping it off.
-            $reason = \Illuminate\Support\Str::limit(trim($e->getMessage()), 500);
-            $settings = is_array($automation->settings) ? $automation->settings : [];
-            $settings['nativeSyncError'] = $reason !== '' ? $reason : 'خطای نامشخص در همگام‌سازی با زرنیو';
-            $settings['nativeSyncFailedAt'] = now()->toIso8601String();
+        if (array_key_exists('nativeSyncError', $settings) || array_key_exists('nativeSyncFailedAt', $settings)) {
+            unset($settings['nativeSyncError'], $settings['nativeSyncFailedAt']);
+            $settings['nativeSyncRetiredAt'] = now()->toIso8601String();
+            $settingsChanged = true;
+        }
 
-            $automation->update(['status' => 'paused', 'settings' => $settings]);
-            session()->flash('warning', 'اتوماسیون ذخیره شد اما فعال نشد؛ علت: '.$settings['nativeSyncError']);
+        $attributes = [];
+        if ($settingsChanged) {
+            $attributes['settings'] = $settings;
+        }
+        if ($automation->execution_mode !== 'local') {
+            $attributes['execution_mode'] = 'local';
+        }
+        if ($attributes !== []) {
+            $automation->forceFill($attributes)->save();
         }
     }
 
@@ -1711,11 +1654,9 @@ class PanelController extends Controller
 
     private function executionModeFor(array $triggers): string
     {
-        // Zernio's native comment automations accept one trigger; everything
-        // with several triggers (or a DM trigger) runs in the local engine.
-        return count($triggers) === 1 && in_array($triggers[0], ['comment', 'story_reply'], true)
-            ? 'zernio'
-            : 'local';
+        // Every trigger runs in the local engine. The native Zernio copy is
+        // retired so the panel's customized reply flow stays authoritative.
+        return 'local';
     }
 
     private function syncKeywords(Automation $automation, string $keywords, string $excluded, string $matchMode): void

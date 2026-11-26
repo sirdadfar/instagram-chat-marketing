@@ -26,8 +26,9 @@
 
 @if($syncError = data_get($automation->settings,'nativeSyncError'))
 <section class="panel-card" style="margin-bottom:18px">
-    <div class="section-head"><div><div class="eyebrow">همگام‌سازی بومی زرنیو</div><h2>اتوماسیون به همین دلیل متوقف شده است</h2></div></div>
+    <div class="section-head"><div><div class="eyebrow">همگام‌سازی بومی زرنیو</div><h2>همگام‌سازی بومی غیرفعال شده است</h2></div></div>
     <p class="error-text">{{ $syncError }}</p>
+    <small>پاسخ‌دهی توسط خود پنل انجام می‌شود. اگر این پیام باقی ماند، یک‌بار ذخیره کن تا نسخه بومی قدیمی در زرنیو هم متوقف شود.</small>
     @if($failedAt = data_get($automation->settings,'nativeSyncFailedAt'))<small>آخرین تلاش: {{ $failedAt }}</small>@endif
 </section>
 @endif
@@ -35,7 +36,7 @@
 <form method="POST" action="{{ route('automations.update',$automation) }}" class="editor-layout" id="automationEditForm" data-trigger="{{ $trigger }}" data-triggers="{{ implode(',',$triggerValues) }}" data-public="{{ $isPublic ? "1" : "0" }}">
 @csrf @method('PUT')
 <input type="hidden" name="triggers_submitted" value="1">
-<input type="hidden" name="execution_mode" id="editExecutionMode" value="zernio">
+<input type="hidden" name="execution_mode" id="editExecutionMode" value="local">
 <input type="hidden" name="goal" value="{{ $isPublic ? 'comment_public' : 'comment_dm' }}">
 <input type="hidden" name="also_match_in_dms" id="editAlsoDms" value="{{ data_get($automation->settings,'alsoMatchInDms',false)?1:0 }}">
 <input type="hidden" name="message_tag" id="editMessageTag" value="{{ $actionConfig['messageTag'] ?? '' }}">

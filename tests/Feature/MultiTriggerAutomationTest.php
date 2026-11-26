@@ -189,6 +189,90 @@ class MultiTriggerAutomationTest extends TestCase
             && $request->data()['isActive'] === false);
     }
 
+    public function test_single_trigger_comment_automations_are_stored_as_local(): void
+    {
+        $owner = User::factory()->create();
+        $account = $this->account($owner);
+
+        $this->panelUser($owner)
+            ->post(route('automations.store'), [
+                'instagram_account_id' => $account->id,
+                'name' => 'کامنت محلی',
+                'status' => 'active',
+                'execution_mode' => 'zernio',
+                'priority' => 100,
+                'match_mode' => 'any',
+                'keywords' => 'لیست',
+                'triggers' => ['comment'],
+                'triggers_submitted' => 1,
+                'dm_message' => 'متن پاسخ',
+                'audience_follower_status' => 'any',
+                'audience_unknown' => 'send',
+                'cooldown_seconds' => 30,
+                'follow_gate_enabled' => 0,
+            ])
+            ->assertRedirect();
+
+        $automation = Automation::latest('id')->firstOrFail();
+
+        $this->assertSame('local', $automation->execution_mode);
+    }
+
+    public function test_saving_an_automation_clears_the_legacy_native_sync_error(): void
+    {
+        config(['zernio.api_key' => 'test-zernio-key']);
+        Http::fake(['*' => Http::response(['success' => true], 200)]);
+
+        $owner = User::factory()->create();
+        $account = $this->account($owner);
+        $automation = $this->automation($account, [
+            'trigger' => 'comment',
+            'triggers' => ['comment'],
+            'execution_mode' => 'zernio',
+            'zernio_automation_id' => 'remote_comment_2',
+            'status' => 'paused',
+            'settings' => [
+                'nativeSyncError' => 'Array to string conversion',
+                'nativeSyncFailedAt' => '2026-11-26T17:07:26+00:00',
+                'followGateEnabled' => false,
+            ],
+        ]);
+
+        $this->panelUser($owner)
+            ->put(route('automations.update', $automation), [
+                'name' => $automation->name,
+                'status' => 'active',
+                'execution_mode' => 'zernio',
+                'priority' => 100,
+                'cooldown_seconds' => 30,
+                'match_mode' => 'any',
+                'keywords' => 'لیست',
+                'triggers' => ['comment'],
+                'triggers_submitted' => 1,
+                'dm_message' => 'متن پاسخ',
+                'audience_follower_status' => 'any',
+                'audience_unknown' => 'send',
+                'follow_gate_enabled' => 0,
+            ])
+            ->assertRedirect();
+
+        $automation->refresh();
+
+        $this->assertSame('local', $automation->execution_mode);
+        $this->assertSame('active', $automation->status);
+        $this->assertArrayNotHasKey('nativeSyncError', $automation->settings);
+        $this->assertArrayNotHasKey('nativeSyncFailedAt', $automation->settings);
+        $this->assertArrayHasKey('nativeSyncRetiredAt', $automation->settings);
+        $this->assertNull($automation->zernio_automation_id);
+
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+            && str_contains($request->url(), '/comment-automations/remote_comment_2')
+            && $request->data()['isActive'] === false);
+
+        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST'
+            && str_ends_with((string) parse_url($request->url(), PHP_URL_PATH), '/comment-automations'));
+    }
+
     public function test_the_panel_renders_multi_trigger_automations(): void
     {
         $owner = User::factory()->create();

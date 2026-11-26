@@ -64,6 +64,34 @@ class ZernioCredentialPinningTest extends TestCase
         Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer tenant-key-123'));
     }
 
+    public function test_native_sync_accepts_a_profile_object_as_the_profile_id(): void
+    {
+        [$user, $account] = $this->tenant();
+        $account->update(['metadata' => []]);
+        $automation = $this->automation($account);
+
+        config([
+            'zernio.base_url' => 'https://zernio.test/api/v1',
+            'zernio.api_key' => 'server-key-must-not-be-used',
+        ]);
+
+        Http::fake([
+            '*/accounts*' => Http::response([
+                'accounts' => [[
+                    '_id' => 'acc_tenant',
+                    // Older/looser API versions return the whole profile object.
+                    'profileId' => ['_id' => 'profile_from_object'],
+                ]],
+            ], 200),
+            '*' => Http::response(['id' => 'remote_1'], 200),
+        ]);
+
+        app(ZernioAutomationSync::class)->sync($automation);
+
+        Http::assertSent(fn ($request) => str_ends_with((string) parse_url($request->url(), PHP_URL_PATH), '/comment-automations')
+            && (string) data_get($request->data(), 'profileId') === 'profile_from_object');
+    }
+
     public function test_action_executor_uses_the_pinned_users_key(): void
     {
         [$user, $account] = $this->tenant();

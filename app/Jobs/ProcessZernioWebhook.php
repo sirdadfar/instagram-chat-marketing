@@ -47,7 +47,9 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   $automations=Automation::with(['keywords','actions','account'])->where('instagram_account_id',$account->id)->where('status','active')->orderBy('priority')->get();
   $trigger=(string)($data['trigger']??'');
   foreach($automations as $a){
-   if($a->execution_mode!=='local')continue;
+   // The panel is the only executor. A legacy row is still skipped only when a
+   // native remote copy is known to exist; everything else runs locally.
+   if($a->execution_mode==='zernio'&&$a->zernio_automation_id)continue;
    // Multi-trigger automations are handled locally for every selected event.
    if(!$a->hasTrigger($trigger))continue;
    $actions=$a->actionsForTrigger($trigger);

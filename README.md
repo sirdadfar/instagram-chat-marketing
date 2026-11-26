@@ -141,7 +141,8 @@ Full production guide: [`docs/PRODUCTION.md`](docs/PRODUCTION.md) · installatio
 | `panel:password-hash` | Legacy utility: bcrypt-hashes a password into `PANEL_ADMIN_PASSWORD_HASH` (pre-tenant installs) |
 | `zernio:account [id] --username=` | Syncs Instagram account info from Zernio |
 | `zernio:webhook --url=` | Creates the production webhook subscription; `--test=<id>` fires a test delivery |
-| `zernio:sync-automation {id}` | Pushes one automation to Zernio's native Comment Automation |
+| `zernio:retire-native [--dry-run]` | Moves every automation to the panel's local engine and disables legacy native Comment Automations |
+| `zernio:sync-automation {id}` | Retires one automation's legacy native copy and moves it to the local engine |
 
 ---
 
@@ -429,7 +430,8 @@ php artisan queue:work database --sleep=0 --tries=3 --backoff=5,30,120 --timeout
 | `panel:password-hash` | ابزار قدیمی: هش bcrypt برای `PANEL_ADMIN_PASSWORD_HASH` (نصب‌های قبل از چندکاربره شدن) |
 | `zernio:account [id] --username=` | همگام‌سازی اطلاعات اکانت اینستاگرام از Zernio |
 | `zernio:webhook --url=` | ساخت اشتراک وبهوک production؛ `--test=<id>` برای ارسال تست |
-| `zernio:sync-automation {id}` | سینک یک اتوماسیون با Comment Automation بومی زرنیو |
+| `zernio:retire-native [--dry-run]` | انتقال همه اتوماسیون‌ها به موتور محلی پنل و غیرفعال‌کردن Comment Automationهای بومی قدیمی |
+| `zernio:sync-automation {id}` | غیرفعال‌کردن نسخه بومی یک اتوماسیون و انتقال آن به موتور محلی |
 
 ---
 
