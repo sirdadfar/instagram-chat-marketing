@@ -12,12 +12,12 @@
 <div class="save-dock-actions"><button class="primary-action" type="submit">✓ ذخیره تنظیمات</button></div></form></section>
 
 <section class="editor-card settings-card-highlight">
-<div class="section-head"><div><div class="eyebrow">شرط دنبال‌کردن</div><h2>اجباری بودن فالو قبل از پاسخ</h2><p>این گزینه برای پاسخ‌های خصوصی و دایرکت به‌صورت پیش‌فرض روشن است. اگر کاربر فالو نکرده باشد، پیام اصلی ارسال نمی‌شود.</p></div><span class="master-state {{ $followGateEnabled?'on':'off' }}">{{ $followGateEnabled?'فعال':'خاموش' }}</span></div>
+<div class="section-head"><div><div class="eyebrow">شرط دنبال‌کردن</div><h2>اجباری بودن فالو قبل از پاسخ</h2><p>با روشن بودن این گزینه، همه پیام‌های دایرکت ورودی (حتی بدون تطابق کلمه کلیدی) قبل از پاسخ بررسی می‌شوند. اگر کاربر فالو نکرده باشد، پیام اصلی ارسال نمی‌شود.</p></div><span class="master-state {{ $followGateEnabled?'on':'off' }}">{{ $followGateEnabled?'فعال':'خاموش' }}</span></div>
 <form method="POST" action="{{ route('settings.save') }}">@csrf
 <input type="hidden" name="global_enabled" value="{{ $globalEnabled ? 1 : 0 }}">
 <input type="hidden" name="hours_enabled" value="{{ $hoursEnabled ? 1 : 0 }}">
 @for($i=0;$i<7;$i++)<input type="hidden" name="day_{{ $i }}" value="{{ data_get($businessHours,$i.'.enabled',true) ? 1 : 0 }}"><input type="hidden" name="from_{{ $i }}" value="{{ data_get($businessHours,$i.'.from','09:00') }}"><input type="hidden" name="to_{{ $i }}" value="{{ data_get($businessHours,$i.'.to','18:00') }}">@endfor
-<label class="master-toggle"><span class="master-icon">✓</span><div><strong>فالو اجباری</strong><small>کاربر باید فالو بودنش را تأیید کند تا آخرین درخواستش پاسخ داده شود.</small></div><input class="toggle-input" type="checkbox" name="follow_gate_enabled" value="1" @checked($followGateEnabled)><span class="toggle-ui"></span></label>
+<label class="master-toggle"><span class="master-icon">✓</span><div><strong>فالو اجباری برای همه پیام‌ها</strong><small>هر پیام دایرکت ورودی بررسی می‌شود؛ تا کاربر فالو بودنش را تأیید نکند، پاسخ خودکار ارسال نمی‌شود.</small></div><input class="toggle-input" type="checkbox" name="follow_gate_enabled" value="1" @checked($followGateEnabled)><span class="toggle-ui"></span></label>
 <input type="hidden" name="follow_gate_without_keywords" value="0">
 <label class="master-toggle"><span class="master-icon">◎</span><div><strong>بررسی فالو حتی بدون تطابق کلمه کلیدی</strong><small>با فعال‌کردن این گزینه، پیام‌های مشتری حتی بدون تطابق با کلمات تعریف‌شده وارد بررسی فالو می‌شوند؛ تا تأیید فالو، پیام اصلی ارسال نخواهد شد.</small></div><input class="toggle-input" type="checkbox" name="follow_gate_without_keywords" value="1" @checked($followGateWithoutKeywords)><span class="toggle-ui"></span></label>
 <div class="follow-gate-fields settings-follow-gate-fields">

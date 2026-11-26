@@ -1,5 +1,6 @@
 <?php
 namespace App\Jobs;
+use App\Models\AppSetting;
 use App\Models\Automation;
 use App\Models\AutomationRun;
 use App\Models\Contact;
@@ -38,6 +39,11 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
     $event->update(['status'=>'processed','processed_at'=>now()]); return;
    }
   }
+  // General follow gate: when it is on, every inbound DM is checked, not only
+  // messages that happen to match an automation keyword.
+  if ($this->globalFollowGate($account,$data,$zernio)) {
+   $event->update(['status'=>'processed','processed_at'=>now()]); return;
+  }
   $automations=Automation::with(['keywords','actions','account'])->where('instagram_account_id',$account->id)->where('status','active')->orderBy('priority')->get();
   $trigger=(string)($data['trigger']??'');
   foreach($automations as $a){
@@ -57,6 +63,76 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
   $run->update(['status'=>$waitingFollow?'pending':($actionFailed?'failed':'completed'),'result'=>$results,'error'=>$failedAction['error']??null,'finished_at'=>$waitingFollow?null:now()]);
   $logStatus=$waitingFollow?'gated':($actionFailed?'failed':'executed');
   $engine->log($a,$context,$eval,$logStatus,$failedAction['error']??null,$results);if($waitingFollow)break;}$event->update(['status'=>'processed','processed_at'=>now()]);}
+ /**
+  * Check the follow relationship for every inbound DM when the general gate is
+  * enabled. Returns true when the message must stop here (prompt sent, or the
+  * contact was already prompted within the last day).
+  */
+ private function globalFollowGate(InstagramAccount $account,array $data,ZernioClient $zernio):bool {
+  $trigger=(string)($data['trigger']??'');
+  if(!in_array($trigger,['direct_message','story_reply'],true))return false;
+  if(empty($data['user_id'])||empty($data['conversation_id']))return false;
+  if(!(bool)AppSetting::getValue('follow_gate_enabled',true))return false;
+
+  $contact=Contact::where('instagram_account_id',$account->id)->where('external_user_id',(string)$data['user_id'])->first();
+  $metadata=is_array($contact?->metadata)?$contact->metadata:[];
+  $pending=$metadata['follow_gate_pending']??null;
+  if(is_array($pending)&&!empty($pending['created_at'])&&\Illuminate\Support\Carbon::parse($pending['created_at'])->gt(now()->subDay())){
+   // One prompt per contact per day; do not spam and do not run automations.
+   return true;
+  }
+
+  // The webhook profile is per-message and already fresh; only ask the API when
+  // Instagram did not reveal the relationship in the payload.
+  $status=FollowStatus::from($data['instagram_profile']??null);
+  if($status===null){
+   try{
+    $status=FollowStatus::from($zernio->getFollowStatus($account->zernio_account_id,(string)$data['user_id'],true));
+   }catch(\Throwable $e){
+    report($e);
+   }
+  }
+  if($status===null&&$contact&&$contact->is_follower!==null)$status=(bool)$contact->is_follower;
+
+  if($status===true){
+   if(is_array($pending)){
+    unset($metadata['follow_gate_pending']);
+    $contact?->update(['metadata'=>$metadata,'is_follower'=>true]);
+   }
+   return false;
+  }
+
+  $gate=FollowGate::configForSettings([]);
+  $token=(string)Str::uuid();
+  $message=$status===false?$gate['notFollowingMessage']:$gate['message'];
+  $button=[['type'=>'postback','title'=>mb_substr($gate['buttonLabel'],0,20),'payload'=>'follow_gate:'.$token]];
+
+  $metadata['follow_gate_pending']=[
+   'token'=>$token,
+   'automation_id'=>null,
+   'scope'=>'global',
+   'context'=>array_filter($data,static fn($value)=>$value!==null),
+   'created_at'=>now()->toIso8601String(),
+  ];
+  $contact=Contact::updateOrCreate(
+   ['instagram_account_id'=>$account->id,'external_user_id'=>(string)$data['user_id']],
+   ['username'=>$data['username']??null,'full_name'=>$data['full_name']??null,'last_seen_at'=>now()]
+  );
+  $contact->update(['metadata'=>$metadata]);
+
+  try{
+   $zernio->sendMessage($data['conversation_id'],$account->zernio_account_id,['message'=>$message,'buttons'=>$button],(string)Str::uuid());
+  }catch(\Throwable $e){
+   report($e);
+   // A failed prompt must not hold the conversation forever.
+   unset($metadata['follow_gate_pending']);
+   $contact->update(['metadata'=>$metadata]);
+   return false;
+  }
+
+  return true;
+ }
+
  private function persistInbox(InstagramAccount $account,array $d):void {if(empty($d['conversation_id']))return;$contact=null;if(!empty($d['user_id'])){$profile=is_array($d['instagram_profile']??null)?$d['instagram_profile']:[];$status=FollowStatus::from($d['instagram_profile']??null);$attributes=['last_seen_at'=>now()];if(!empty($d['username']))$attributes['username']=$d['username'];if(!empty($d['full_name']))$attributes['full_name']=$d['full_name'];
    // Persist a known follower value only; a payload without the profile must not erase it.
    if($status!==null)$attributes['is_follower']=$status;
@@ -93,7 +169,12 @@ class ProcessZernioWebhook implements ShouldQueue {use Dispatchable,InteractsWit
     $zernio->sendMessage($data['conversation_id'],$account->zernio_account_id,['message'=>$message,'buttons'=>[['type'=>'postback','title'=>mb_substr($label,0,20),'payload'=>'follow_gate:'.$pending['token']]]],(string)Str::uuid());
     return true;
   }
-  if(!$automation||$automation->status!=='active') return true;
+  if(!$automation||$automation->status!=='active'){
+   // Global gate without a specific automation: confirmation is enough. Clear
+   // the pending marker so the next message is handled normally.
+   $metadata=is_array($contact->metadata)?$contact->metadata:[];unset($metadata['follow_gate_pending']);$contact->update(['metadata'=>$metadata,'is_follower'=>true]);
+   return true;
+  }
   $context=is_array($pending['context']??null)?$pending['context']:[];
   $originalTrigger=(string)($context['trigger']??'');
   // The postback carries the live conversation/user data; the stored context

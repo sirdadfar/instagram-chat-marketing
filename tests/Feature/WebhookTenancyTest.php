@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\ProcessZernioWebhook;
+use App\Models\AppSetting;
 use App\Models\InstagramAccount;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\Automation\WebhookEventAdapter;
 use App\Support\Credentials;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -118,6 +121,49 @@ class WebhookTenancyTest extends TestCase
             'HTTP_ACCEPT' => 'application/json',
             'HTTP_X_ZERNIO_SIGNATURE' => $signature,
         ], $raw)->assertStatus(202);
+    }
+
+    public function test_the_general_follow_gate_prompts_every_direct_message(): void
+    {
+        $owner = User::factory()->create();
+        Credentials::rememberUserKey($owner, 'tenant-key-123');
+        $account = $this->accountFor($owner, 'acc_own', 'page_own');
+        AppSetting::setValue('follow_gate_enabled', true);
+
+        Http::fake([
+            '*' => Http::response(['data' => ['messageId' => 'm1']], 200),
+        ]);
+
+        $event = WebhookEvent::create([
+            'provider' => 'zernio',
+            'event_id' => 'evt_dm',
+            'event_type' => 'message.received',
+            'instagram_account_id' => $account->id,
+            'payload' => [
+                'id' => 'evt_dm',
+                'event' => 'message.received',
+                'account' => ['accountId' => 'acc_own'],
+                'conversation' => ['id' => 'conv_1'],
+                'message' => [
+                    'id' => 'm1',
+                    'direction' => 'incoming',
+                    'conversationId' => 'conv_1',
+                    'text' => 'قیمت',
+                    'sender' => [
+                        'id' => 'u1',
+                        'username' => 'buyer',
+                        'instagramProfile' => ['isFollower' => false],
+                    ],
+                ],
+            ],
+            'status' => 'pending',
+        ]);
+
+        app()->call([new ProcessZernioWebhook($event->id), 'handle']);
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/inbox/conversations/conv_1/messages')
+            && str_contains(json_encode($request->data()), 'follow_gate:'));
+        $this->assertSame('processed', $event->fresh()->status);
     }
 
     public function test_the_adapter_skips_outgoing_echoes_and_standby_messages(): void
