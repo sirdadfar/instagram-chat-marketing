@@ -117,10 +117,27 @@ jobs:
           php artisan route:cache
           php artisan view:cache
 
-          if command -v supervisorctl >/dev/null 2>&1; then
-            supervisorctl reread || true
-            supervisorctl update || true
-            supervisorctl restart 'ig-automate-worker:*' || true
+          # Queue workers keep the old PHP classes in memory. Signal them to
+          # restart; without this a deploy only updates web requests.
+          php artisan queue:restart || true
+
+          SUPERVISORCTL=""
+          for candidate in supervisorctl /usr/bin/supervisorctl /usr/local/bin/supervisorctl; do
+            if command -v "$candidate" >/dev/null 2>&1 || [ -x "$candidate" ]; then
+              SUPERVISORCTL="$candidate"
+              break
+            fi
+          done
+          if [ -n "$SUPERVISORCTL" ]; then
+            "$SUPERVISORCTL" reread || true
+            "$SUPERVISORCTL" update || true
+            "$SUPERVISORCTL" restart 'ig-automate-worker:*' || "$SUPERVISORCTL" restart ig-automate-worker || true
+          fi
+
+          # Never leave production without a worker after a deploy.
+          sleep 2
+          if ! pgrep -f 'artisan queue:work' >/dev/null 2>&1; then
+            nohup php artisan queue:work --sleep=1 --tries=3 --backoff=5,30,120 --timeout=90 >> storage/logs/worker.log 2>&1 &
           fi
 
           if command -v systemctl >/dev/null 2>&1; then
