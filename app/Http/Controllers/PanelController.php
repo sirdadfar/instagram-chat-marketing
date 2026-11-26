@@ -20,6 +20,7 @@ use App\Support\Credentials;
 use App\Support\QuickReplies;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\File;
 
 class PanelController extends Controller
@@ -1439,6 +1440,21 @@ class PanelController extends Controller
             : 'همگام‌سازی انجام شد: هیچ پیج اینستاگرامی متصل به این کلید در سرویس پیدا نشد.';
 
         return back()->with('success', $message);
+    }
+
+    /** DELETE /settings/accounts/{account} → remove a page from this panel. */
+    public function destroyAccount(int $account): \Illuminate\Http\RedirectResponse
+    {
+        $instagramAccount = Tenancy::accounts()->whereKey($account)->firstOrFail();
+        $username = $instagramAccount->username ? '@'.$instagramAccount->username : 'پیج اینستاگرام';
+
+        DB::transaction(function () use ($instagramAccount): void {
+            // Related automations are removed by the account foreign-key cascade.
+            // Contacts and conversations are retained with a null account reference.
+            $instagramAccount->delete();
+        });
+
+        return back()->with('success', "اتصال {$username} از پنل حذف شد. اتوماسیون‌های وابسته نیز حذف شدند.");
     }
 
     private static function credentialStatusLabels(string $status): string
