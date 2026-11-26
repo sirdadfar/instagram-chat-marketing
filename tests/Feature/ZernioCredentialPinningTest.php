@@ -40,6 +40,7 @@ class ZernioCredentialPinningTest extends TestCase
             'status' => 'active',
             'execution_mode' => 'zernio',
             'settings' => ['followGateEnabled' => false],
+            'audience' => ['followerStatus' => 'non_follower', 'whenUnknown' => 'send'],
         ]);
     }
 
